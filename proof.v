@@ -158,7 +158,7 @@ Module ParId.
       in_app ct e \/ in_lib ct' e'.
   Proof.
     intros ct ct' c e e' m pfc pfc' c_in_app c_res_e c_res_e' rel.
-    remember pfc as pfcr. induction pfcr.
+    remember pfc as pfcr. induction pfcr as [| i ms d pfd IHd c_ext_d not_lib_app app_ext_app].
     (* c is Obj *)
     - unfold mresolve in c_res_e. inversion c_res_e.
     (* c extends d *)
@@ -166,7 +166,7 @@ Module ParId.
       (* m-res *)
       + inversion c_res_e. left. apply c_in_app.
       (* m-res-inh *)
-      + destruct o.
+      + destruct app_ext_app as [d_in_lib | d_in_app].
         * destruct a. inversion H2. apply H3 in H. apply in_app_in_table in H.
           apply H4 in e0 as [Dt' extCD'].
           assert (in_lib ct' d) as Dl'.
