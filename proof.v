@@ -57,6 +57,7 @@ Module ParId.
     | C i _ => extends_id ct i d
     end.
 
+
   Definition in_lib_id (ct : class_table) (i : id) : Prop :=
     match ct with (_, lib) => lib i <> None end.
 
@@ -102,9 +103,33 @@ Module ParId.
       ~ (in_lib ct (C i ms) /\ in_app ct (C i ms)) ->
       (in_lib ct d /\ in_table ct (C i ms)) \/ (in_app ct d /\ in_app ct (C i ms))  ->
       valid_class ct (C i ms).
+        
 
   Definition valid_table (ct : class_table) : Type :=
     forall c, in_table ct c -> valid_class ct c.
+
+  Lemma extends_injective : forall ct c d d',
+      valid_class ct c -> extends ct c d -> extends ct c d' -> d = d'.
+  Proof.
+    intros ct c d d' pfc c_ext_d c_ext_d'.
+    unfold extends in c_ext_d, c_ext_d'. destruct c as [| i ms].
+    - inversion c_ext_d.
+    - unfold extends_id in c_ext_d, c_ext_d'. remember ct as ct'. destruct ct' as [app lib]. inversion pfc.
+      destruct c_ext_d as [d_in_app | d_in_lib], c_ext_d' as [d'_in_app | d'_in_lib].
+      + rewrite d_in_app in d'_in_app. inversion d'_in_app. reflexivity.
+      + assert (in_lib (app, lib) (C i ms)) as c_in_lib.
+        { unfold in_lib, in_lib_id, not. intros. rewrite d'_in_lib in H5. inversion H5. }
+        assert (in_app (app, lib) (C i ms)) as c_in_app.
+        { unfold in_app, in_app_id, not. intros. rewrite d_in_app in H5. inversion H5. }
+        unfold not in H3. assert False. apply H3. split. apply c_in_lib. apply c_in_app. inversion H5.
+      + assert (in_lib (app, lib) (C i ms)) as c_in_lib.
+        { unfold in_lib, in_lib_id, not. intros. rewrite d_in_lib in H5. inversion H5. }
+        assert (in_app (app, lib) (C i ms)) as c_in_app.
+        { unfold in_app, in_app_id, not. intros. rewrite d'_in_app in H5. inversion H5. }
+        unfold not in H3. assert False. apply H3. split. apply c_in_lib. apply c_in_app. inversion H5.
+      + rewrite d_in_lib in d'_in_lib. inversion d'_in_lib. reflexivity.
+  Qed.
+        
 
   Fixpoint mresolve (ct : class_table) (m : method) (c : class) (pfc : valid_class ct c) : option class :=
     match pfc with
@@ -114,6 +139,10 @@ Module ParId.
                                         else mresolve ct m d pfd
     end.
 
+  Lemma mres_lib_in_lib : forall (ct : class_table) (m : method) (c e : class) (pfc : valid_class ct c),
+      in_lib ct c -> mresolve ct m c pfc = Some e -> in_lib ct e.
+    admit.
+  Admitted.
   Lemma lemma1 : forall (ct : class_table) (c e : class) (m : method) (pfc : valid_class ct c),
       mresolve ct m c pfc = Some e -> in_app ct e -> in_app ct c.
   Proof.
@@ -131,7 +160,8 @@ Module ParId.
   Inductive ave_rel (ct ct' : class_table) : Prop :=
     | AveRel :  valid_table ct -> valid_table ct' ->
                 (forall c, in_app ct c <-> in_app ct' c) ->
-                (forall c d, extends ct c d -> in_table ct' c -> in_table ct' d /\ extends ct' c d) ->
+                (forall c d, extends ct c d -> in_table ct' c -> extends ct' c d) ->
+                (forall c d, extends ct c d -> in_lib ct d -> in_table ct' c -> in_lib ct' d) ->
                 ave_rel ct ct'.
 
   Lemma lib'_subset_lib : forall (ct ct' : class_table) (c : class),
@@ -141,9 +171,9 @@ Module ParId.
     - apply H0.
     - apply H2 in H0. unfold valid_table in X.
       assert (in_table ct c). { apply in_app_in_table. apply H0. }
-      apply X in H4. inversion H4.
-      + rewrite <- H5 in H0. inversion H0.
-      + rewrite H9 in H7. destruct H7. split. apply H1. apply H0.
+      apply X in H5. inversion H5.
+      + rewrite <- H6 in H0. inversion H0.
+      + rewrite H10 in H8. destruct H8. split. apply H1. apply H0.
   Qed.
 
   (*Lemma ext_in_ct_ext_in_ct' : forall (ct ct' : class_table) (c d : class),
@@ -156,23 +186,52 @@ Module ParId.
   Lemma lemma2 : forall (ct ct' : class_table) (c e e' : class) (m : method) (pfc : valid_class ct c) (pfc' : valid_class ct' c),
       in_app ct c -> mresolve ct m c pfc = Some e -> mresolve ct' m c pfc' = Some e'  -> ave_rel ct ct' ->
       in_app ct e \/ in_lib ct' e'.
-  Proof.
-    intros ct ct' c e e' m pfc pfc' c_in_app c_res_e c_res_e' rel.
-    remember pfc as pfcr. induction pfcr as [| i ms d pfd IHd c_ext_d not_lib_app app_ext_app].
-    (* c is Obj *)
-    - unfold mresolve in c_res_e. inversion c_res_e.
-    (* c extends d *)
-    - unfold mresolve in c_res_e. fold mresolve in c_res_e. destruct (existsb (fun m' : id => beq_id m m') ms) in c_res_e.
-      (* m-res *)
-      + inversion c_res_e. left. apply c_in_app.
-      (* m-res-inh *)
-      + destruct app_ext_app as [d_in_lib | d_in_app].
-        * destruct a. inversion H2. apply H3 in H. apply in_app_in_table in H.
-          apply H4 in e0 as [Dt' extCD'].
-          assert (in_lib ct' d) as Dl'.
-          { apply lib'_subset_lib with ct. apply H2. apply Dt'. apply H3. }
-          assert (in_app ct  -> in_app ct d).
- 
+Proof.
+  intros ct ct' c e e' m pfc pfc' c_in_app c_res_e c_res_e' rel.
+  induction pfc as [| i ms d pfd IHd c_ext_d not_lib_app app_ext_app].
+  (* c is Obj *)
+  - unfold mresolve in c_res_e. inversion c_res_e.
+  (* c extends d *)
+  - unfold mresolve in c_res_e. fold mresolve in c_res_e.
+    destruct (existsb (fun m' : id => beq_id m m') ms) eqn:m_res.
+    (* m-res *)
+    + inversion c_res_e. left. apply c_in_app.
+    (* m-res-inh *)
+    + inversion rel as [ct_val ct'_val keep_app keep_ext keep_lib].
+      remember (C i ms) as c. unfold mresolve in c_res_e'.
+      (* can't induct on pfc and pfc' simultaneously, so manually destruct pfc' and show that it's the same d *)
+      destruct pfc' as [_ | i0 ms0 d0 pfd' c_ext_d'] eqn:pfc''.
+      * inversion c_res_e'.
+      * fold mresolve in c_res_e'. inversion Heqc.
+        rewrite H1 in c_res_e'. rewrite m_res in c_res_e'.
+        assert (d = d0) as deq.
+        { apply extends_injective with (ct := ct') (c := (C i0 ms0)).
+          -- apply pfc'.
+          -- apply keep_ext.
+             ++ apply c_ext_d.
+             ++ apply in_app_in_table. apply keep_app. apply c_in_app.
+          -- apply c_ext_d'. }
+        destruct app_ext_app as [[d_in_lib _] | [d_in_app _]].
+        (* d in lib - use averroes transformation properties *)
+        -- right. apply mres_lib_in_lib with (m := m) (c := d0) (pfc := pfd').
+           ++ apply keep_lib with (c := (C i0 ms0)).
+              ** rewrite <- deq. apply c_ext_d.
+              ** rewrite <- deq. apply d_in_lib.
+              ** apply in_app_in_table. apply keep_app. apply c_in_app.
+           ++ apply c_res_e'.
+        (* d in app - use induction hypothesis *)
+        -- assert (forall pfc' : valid_class ct' d,
+                      in_app ct d ->
+                      mresolve ct' m d pfc' = Some e' -> in_app ct e \/ in_lib ct' e') as IHd'.
+           { intros pfc'0 _ mres'. apply IHd with (pfc' := pfc'0).
+             apply d_in_app. apply c_res_e. apply mres'. }
+           rewrite deq in IHd'. 
+           apply IHd' with (pfc' := pfd').
+           ++ rewrite <- deq. apply d_in_app.
+           ++ apply c_res_e'.
+Qed.
+         
+       
 End ParId.
 
 Module ParC.
