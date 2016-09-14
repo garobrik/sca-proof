@@ -43,14 +43,14 @@ Section FJ_definitions.
 
   End Ty_Map.
 
-  Inductive FD := fd : Ty -> F -> FD.
-  Inductive VD := vd : Ty -> X -> VD.
+  Inductive FD := fd : Ty -> F -> FD. (* Function Definition *)
+  Inductive VD := vd : Ty -> X -> VD. (* Variable Definition *)
 
-  Inductive K := k : C -> list FD -> K.
+  Inductive K := k : C -> list FD -> K. (* Class Constructor *) 
 
-  Inductive Var := var : X -> Var | this : Var.
+  Inductive Var := var : X -> Var | this : Var. (* Variable Expression *)
 
-  Variable E : Set.
+  Variable E : Set. (* Expression *)
 
   Definition Es := list E.
 
