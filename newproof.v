@@ -22,19 +22,6 @@ Section generic_defs.
     | nil => empty_set
     | h :: l' => add h (set_from_list l')
     end.
-
-  (*Definition set (A : Type) := list A.
-  Definition union {A : Type} (a b : set A) := a ++ b.
-  Theorem union_introl : forall (A : Type) (s t : set A) (a : A),
-      In a s -> In a (s ++ t).
-  Proof.
-    intros. induction s.
-    - inversion H.
-    - simpl. simpl in H. destruct H.
-      + left. trivial.
-      + right. eauto.
-  Qed. *)
-
   Fixpoint index_of {A : Type} (f : A -> bool) (l : list A) : option nat :=
     match l with
     | nil => None
@@ -660,40 +647,6 @@ Section props.
       alpha ct ct' gamma e E_Lib lpt -> alpha ct ct' gamma (E_Cast ci e) E_Lib lpt
   | Rel_Lpt : forall e e' lpt,
       alpha ct ct' gamma e e' lpt -> set_In e' lpt -> alpha ct ct' gamma e E_Lib lpt.
-  (*Inductive alpha (ct ct' : class_table) (gamma : context) : expr * (expr * set expr) -> Prop :=
-  | Rel_Field : forall e e' f lpt,
-      alpha ct ct' gamma (e, (e', lpt)) ->
-      alpha ct ct' gamma ((E_Field e f), (E_Field e' f, lpt))
-  | Rel_Lib_Field : forall e c d f lpt,
-      alpha ct ct' gamma (e, (E_Lib, lpt)) ->
-      declaring_class f c = Some d -> in_lib ct d ->
-      type_of gamma e c ->
-      alpha ct ct' gamma ((E_Field e f), (E_Lib, lpt))
-  | Rel_New : forall c le le' lpt,
-      in_table ct' c -> length le = length le' ->
-      Forall (alpha ct ct' gamma) (combine le (combine le' (repeat lpt (length le')))) ->
-      alpha ct ct' gamma (E_New c le, (E_New c le', lpt))
-  | Rel_Lib_New : forall c le lpt,
-      in_lib ct c -> Forall (fun e => alpha ct ct' gamma (e, (E_Lib, lpt))) le ->
-      alpha ct ct' gamma ((E_New c le), (E_Lib, lpt))
-  | Rel_Invk : forall e e' le le' m lpt,
-      alpha ct ct' gamma (e, (e', lpt)) ->
-      length le = length le' ->
-      Forall (alpha ct ct' gamma) (combine le (combine le' (repeat lpt (length le')))) ->
-      alpha ct ct' gamma ((E_Invk e m le), (E_Invk e' m le', lpt))
-  | Rel_Lib_Invk : forall e le mi lpt,
-      (exists c, in_lib ct c /\ In mi (dmethods_id c)) ->
-      alpha ct ct' gamma (e, (E_Lib, lpt)) ->
-      Forall (fun e' => alpha ct ct' gamma (e', (E_Lib, lpt))) le ->
-      alpha ct ct' gamma ((E_Invk e mi le), (E_Lib, lpt))
-  | Rel_Cast : forall e e' c lpt,
-      alpha ct ct' gamma (e, (e', lpt)) ->
-      alpha ct ct' gamma ((E_Cast c e), (E_Cast c e', lpt))
-  | Rel_Lib_Cast : forall e ci lpt,
-      alpha ct ct' gamma (e, (E_Lib, lpt)) -> alpha ct ct' gamma ((E_Cast ci e), (E_Lib, lpt))
-  | Rel_Lpt : forall e e' lpt,
-      alpha ct ct' gamma (e, (e', lpt)) -> set_In e' lpt -> alpha ct ct' gamma (e, (E_Lib, lpt)).*)
-
 
   Inductive type_checks (ct : class_table) (gamma : context) : expr -> Prop :=
   | TC_Var : forall x, in_table ct (gamma x) -> type_checks ct gamma (E_Var x)
@@ -795,90 +748,92 @@ Section list_inductions.
       | E_Lib => f4
       end.
 
-  Theorem alpha_ind_list :
-    forall (ct ct' : class_table) (gamma : context) (P : expr -> expr -> set expr -> Prop),
-      (forall (e e' : expr) (f : field_id) (lpt : set expr),
-          alpha ct ct' gamma e e' lpt -> P e e' lpt -> P (E_Field e f) (E_Field e' f) lpt) ->
-      (forall (e : expr) (c d : class) (f0 : field_id) (lpt : set expr),
+  Print Forall_list_impl.
+  Print Forall.
+  Definition alpha_ind_list :=
+    fun (ct ct' : class_table) (gamma : context) (P : expr -> expr -> set expr -> Prop)
+      (f : forall (e e' : expr) (f : field_id) (lpt : set expr),
+          alpha ct ct' gamma e e' lpt -> P e e' lpt -> P (E_Field e f) (E_Field e' f) lpt)
+      (f0 : forall (e : expr) (c d : class) (f0 : field_id) (lpt : set expr),
           alpha ct ct' gamma e E_Lib lpt ->
           P e E_Lib lpt ->
-          declaring_class f0 c = Some d -> in_lib ct d -> type_of gamma e c -> P (E_Field e f0) E_Lib lpt) ->
-      (forall (c : class) (le le' : list expr) (lpt : set expr),
+          declaring_class f0 c = Some d -> in_lib ct d -> type_of gamma e c -> P (E_Field e f0) E_Lib lpt)
+      (f1 : forall (c : class) (le le' : list expr) (lpt : set expr),
           in_table ct' c ->
           length le = length le' ->
           Forall (fun p : expr * expr => alpha ct ct' gamma (fst p) (snd p) lpt) (combine le le') ->
           Forall (fun p : expr * expr => P (fst p) (snd p) lpt) (combine le le') ->
-          P (E_New c le) (E_New c le') lpt) ->
-      (forall (c : class) (le : list expr) (lpt : set expr),
+          P (E_New c le) (E_New c le') lpt)
+      (f2 : forall (c : class) (le : list expr) (lpt : set expr),
           in_lib ct c ->
           Forall (fun e : expr => alpha ct ct' gamma e E_Lib lpt) le ->
           Forall (fun e : expr => P e E_Lib lpt) le ->
-          P (E_New c le) E_Lib lpt) ->
-      (forall (e e' : expr) (le le' : list expr) (m : method_id) (lpt : set expr),
+          P (E_New c le) E_Lib lpt)
+      (f3 : forall (e e' : expr) (le le' : list expr) (m : method_id) (lpt : set expr),
           alpha ct ct' gamma e e' lpt ->
           P e e' lpt ->
           length le = length le' ->
           Forall (fun p : expr * expr => alpha ct ct' gamma (fst p) (snd p) lpt) (combine le le') ->
           Forall (fun p : expr * expr => P (fst p) (snd p) lpt) (combine le le') ->
-          P (E_Invk e m le) (E_Invk e' m le') lpt) ->
-      (forall (e : expr) (le : list expr) (mi : method_id) (lpt : set expr),
+          P (E_Invk e m le) (E_Invk e' m le') lpt)
+      (f4 : forall (e : expr) (le : list expr) (mi : method_id) (lpt : set expr),
           (exists c : class, in_lib ct c /\ In mi (dmethods_id c)) ->
           alpha ct ct' gamma e E_Lib lpt ->
           P e E_Lib lpt ->
           Forall (fun e' : expr => alpha ct ct' gamma e' E_Lib lpt) le ->
-          Forall (fun e' : expr => P e' E_Lib lpt) le ->
-          P (E_Invk e mi le) E_Lib lpt) ->
-      (forall (e e' : expr) (c : class) (lpt : set expr),
-          alpha ct ct' gamma e e' lpt -> P e e' lpt -> P (E_Cast c e) (E_Cast c e') lpt) ->
-      (forall (e : expr) (ci : class) (lpt : set expr),
-          alpha ct ct' gamma e E_Lib lpt -> P e E_Lib lpt -> P (E_Cast ci e) E_Lib lpt) ->
-      (forall (e e' : expr) (lpt : set expr),
-          alpha ct ct' gamma e e' lpt -> P e e' lpt -> set_In e' lpt -> P e E_Lib lpt) ->
-      forall (e e0 : expr) (s : set expr), alpha ct ct' gamma e e0 s -> P e e0 s.
-  Admitted.
+          Forall (fun e : expr => P e E_Lib lpt) le ->
+          P (E_Invk e mi le) E_Lib lpt)
+      (f5 : forall (e e' : expr) (c : class) (lpt : set expr),
+          alpha ct ct' gamma e e' lpt -> P e e' lpt -> P (E_Cast c e) (E_Cast c e') lpt)
+      (f6 : forall (e : expr) (ci : class) (lpt : set expr),
+          alpha ct ct' gamma e E_Lib lpt -> P e E_Lib lpt -> P (E_Cast ci e) E_Lib lpt)
+      (f7 : forall (e e' : expr) (lpt : set expr),
+          alpha ct ct' gamma e e' lpt -> P e e' lpt -> set_In e' lpt -> P e E_Lib lpt) =>
+      fix F (e e0 : expr) (s : set expr) (a : alpha ct ct' gamma e e0 s) {struct a} : P e e0 s :=
+      match a in (alpha _ _ _ e1 e2 s0) return (P e1 e2 s0) with
+      | Rel_Field _ _ _ e1 e' f8 lpt a0 => f e1 e' f8 lpt a0 (F e1 e' lpt a0)
+      | Rel_Lib_Field _ _ _ e1 c d f8 lpt a0 e2 i t => f0 e1 c d f8 lpt a0 (F e1 E_Lib lpt a0) e2 i t
+      | Rel_New _ _ _ c le le' lpt i e1 f8 =>
+        f1 c le le' lpt i e1 f8
+           (let Q := (fun p => alpha ct ct' gamma (fst p) (snd p) lpt) in
+            let P' := (fun p => P (fst p) (snd p) lpt) in
+            (fix f_impl (l : list (expr * expr)) (F_Q : Forall Q l) : Forall P' l :=
+               match F_Q with
+               | Forall_nil _ => Forall_nil P'
+               | @Forall_cons _ _ p l' Qp Ql' => Forall_cons p (F (fst p) (snd p) lpt Qp) (f_impl l' Ql')
+               end) (combine le le') f8)
+      | Rel_Lib_New _ _ _ c le lpt i f8 =>
+        f2 c le lpt i f8
+           (let Q := (fun e => alpha ct ct' gamma e E_Lib lpt) in
+            let P' := (fun e => P e E_Lib lpt) in
+            (fix f_impl (l : list expr) (F_Q : Forall Q l) : Forall P' l :=
+               match F_Q with
+               | Forall_nil _ => Forall_nil P'
+               | @Forall_cons _ _ e l' Qe Ql' => Forall_cons e (F e E_Lib lpt Qe) (f_impl l' Ql')
+               end) le f8)
+      | Rel_Invk _ _ _ e1 e' le le' m lpt a0 e2 f8 =>
+        f3 e1 e' le le' m lpt a0 (F e1 e' lpt a0) e2 f8
+           (let Q := (fun p => alpha ct ct' gamma (fst p) (snd p) lpt) in
+            let P' := (fun p => P (fst p) (snd p) lpt) in
+            (fix f_impl (l : list (expr * expr)) (F_Q : Forall Q l) : Forall P' l :=
+               match F_Q with
+               | Forall_nil _ => Forall_nil P'
+               | @Forall_cons _ _ p l' Qp Ql' => Forall_cons p (F (fst p) (snd p) lpt Qp) (f_impl l' Ql')
+               end) (combine le le') f8)
+      | Rel_Lib_Invk _ _ _ e1 le mi lpt e2 a0 f8 =>
+        f4 e1 le mi lpt e2 a0 (F e1 E_Lib lpt a0) f8
+           (let Q := (fun e => alpha ct ct' gamma e E_Lib lpt) in
+            let P' := (fun e => P e E_Lib lpt) in
+            (fix f_impl (l : list expr) (F_Q : Forall Q l) : Forall P' l :=
+               match F_Q with
+               | Forall_nil _ => Forall_nil P'
+               | @Forall_cons _ _ e l' Qe Ql' => Forall_cons e (F e E_Lib lpt Qe) (f_impl l' Ql')
+               end) le f8)
+      | Rel_Cast _ _ _ e1 e' c lpt a0 => f5 e1 e' c lpt a0 (F e1 e' lpt a0)
+      | Rel_Lib_Cast _ _ _ e1 ci lpt a0 => f6 e1 ci lpt a0 (F e1 E_Lib lpt a0)
+      | Rel_Lpt _ _ _ e1 e' lpt a0 s0 => f7 e1 e' lpt a0 (F e1 e' lpt a0) s0
+      end.
 
-  (*Theorem alpha_ind_list : forall (ct ct' : class_table) (gamma : context) (P : expr * (expr * set expr) -> Prop),
-       (forall (e e' : expr) (f : field_id) (lpt : set expr),
-        alpha ct ct' gamma (e, (e', lpt)) -> P (e, (e', lpt)) -> P (E_Field e f, (E_Field e' f, lpt))) ->
-       (forall (e : expr) (c d : class) (f0 : field_id) (lpt : set expr),
-        alpha ct ct' gamma (e, (E_Lib, lpt)) ->
-        P (e, (E_Lib, lpt)) ->
-        declaring_class f0 c = Some d -> in_lib ct d -> type_of gamma e c -> P (E_Field e f0, (E_Lib, lpt))) ->
-       (forall (c : class) (le le' : list expr) (lpt : set expr),
-        in_table ct' c ->
-        length le = length le' ->
-        Forall (alpha ct ct' gamma) (combine le (combine le' (repeat lpt (length le')))) ->
-        Forall P (combine le (combine le' (repeat lpt (length le')))) ->
-        P (E_New c le, (E_New c le', lpt))) ->
-       (forall (c : class) (le : list expr) (lpt : set expr),
-        in_lib ct c ->
-        Forall (fun e : expr => alpha ct ct' gamma (e, (E_Lib, lpt))) le ->
-        Forall (fun e : expr => P (e, (E_Lib, lpt))) le ->
-        P (E_New c le, (E_Lib, lpt))) ->
-       (forall (e e' : expr) (le le' : list expr) (m : method_id) (lpt : set expr),
-        alpha ct ct' gamma (e, (e', lpt)) ->
-        P (e, (e', lpt)) ->
-        length le = length le' ->
-        Forall (alpha ct ct' gamma) (combine le (combine le' (repeat lpt (length le')))) ->
-        Forall P (combine le (combine le' (repeat lpt (length le')))) ->
-        P (E_Invk e m le, (E_Invk e' m le', lpt))) ->
-       (forall (e : expr) (le : list expr) (mi : method_id) (lpt : set expr),
-        (exists c : class, in_lib ct c /\ In mi (dmethods_id c)) ->
-        alpha ct ct' gamma (e, (E_Lib, lpt)) ->
-        P (e, (E_Lib, lpt)) ->
-        Forall (fun e' : expr => alpha ct ct' gamma (e', (E_Lib, lpt))) le ->
-        Forall (fun e : expr => P (e, (E_Lib, lpt))) le ->
-        P (E_Invk e mi le, (E_Lib, lpt))) ->
-       (forall (e e' : expr) (c : class) (lpt : set expr),
-        alpha ct ct' gamma (e, (e', lpt)) -> P (e, (e', lpt)) -> P (E_Cast c e, (E_Cast c e', lpt))) ->
-       (forall (e : expr) (ci : class) (lpt : set expr),
-        alpha ct ct' gamma (e, (E_Lib, lpt)) -> P (e, (E_Lib, lpt)) -> P (E_Cast ci e, (E_Lib, lpt))) ->
-       (forall (e e' : expr) (lpt : set expr),
-        alpha ct ct' gamma (e, (e', lpt)) -> P (e, (e', lpt)) -> set_In e' lpt -> P (e, (E_Lib, lpt))) ->
-       forall p : expr * (expr * set expr), alpha ct ct' gamma p -> P p.
-  Proof. admit. Admitted.*)
-
-End list_inductions.
 Section ct_lib_lemmas.
   Lemma in_lib_in_ct_lib : forall ct c,
     in_lib ct c -> in_table (ct_lib ct) c.
@@ -921,44 +876,20 @@ Section ct_lib_lemmas.
       valid_table ct -> type_checks (ct_lib ct) gamma e -> type_checks ct gamma e.
   Proof.
     intros ct gamma e pft typ_lib. 
-    induction e using expr_ind_list.
-    - inversion typ_lib. apply TC_Var. unfold in_table. right. apply in_ct_lib_in_lib; trivial.
-    - inversion typ_lib. apply TC_Field with d; trivial.
-      + unfold in_table. right. apply in_ct_lib_in_lib; trivial.
-      + apply IHe; trivial.
-    - inversion typ_lib. apply TC_New; trivial.
-      + unfold in_table. right. apply in_ct_lib_in_lib; trivial.
-      + apply Forall_list_impl with (P := type_checks (ct_lib ct) gamma); trivial.
-    - inversion typ_lib. apply TC_Invk with d; trivial.
-      + unfold in_table. right. apply in_ct_lib_in_lib; trivial.
-      + apply IHe. trivial.
-      + apply Forall_list_impl with (P := type_checks (ct_lib ct) gamma); trivial.
-    - inversion typ_lib. apply TC_Cast; trivial.
-      + unfold in_table. right. apply in_ct_lib_in_lib; trivial.
-      + apply IHe; trivial.
-    - inversion typ_lib.
+    induction e using expr_ind_list; inversion typ_lib;
+      try constructor; try apply TC_Field with d; try apply TC_Invk with d;
+        try (unfold in_table; right; apply in_ct_lib_in_lib; trivial);
+        try apply IHe; try (apply Forall_list_impl with (P := type_checks (ct_lib ct) gamma)); trivial.
   Qed.
 
   Lemma valid_expr_lib_ct : forall (ct : class_table) (gamma : context) (e : expr),
       valid_table ct -> valid_expr (ct_lib ct) gamma e -> valid_expr ct gamma e.
   Proof.
     intros ct gamma e pft val_lib.
-    induction e using expr_ind_list.
-    - inversion val_lib. apply Val_Var; trivial. apply type_checks_lib_ct; trivial.
-    - inversion val_lib. apply Val_Field with c; trivial.
-      + apply type_checks_lib_ct; trivial.
-      + apply IHe; trivial.
-    - inversion val_lib. apply Val_New; trivial.
-      + apply type_checks_lib_ct; trivial.
-      + apply Forall_list_impl with (P := valid_expr (ct_lib ct) gamma); trivial.
-    - inversion val_lib. apply Val_Invk with c; trivial.
-      + apply type_checks_lib_ct; trivial.
-      + apply IHe; trivial.
-      + apply Forall_list_impl with (P := valid_expr (ct_lib ct) gamma); trivial.
-    - inversion val_lib. apply Val_Cast; trivial.
-      + apply type_checks_lib_ct; trivial.
-      + apply IHe; trivial.
-    - apply Val_Lib.
+    induction e using expr_ind_list; try inversion val_lib;
+      try constructor; try (apply Val_Field with c); try (apply Val_Invk with c);
+        try apply IHe; try apply type_checks_lib_ct;
+          try (apply Forall_list_impl with (P := valid_expr (ct_lib ct) gamma)); trivial.
   Qed.
 
   Lemma typ_check_in_lib_typ_in_lib : forall ct gamma e c,
@@ -1007,13 +938,11 @@ End lemmas.
 Section eq_dec.
   Lemma eq_var_dec : forall v v' : var, {v = v'} + {v <> v'}.
   Proof.
-    intros. destruct v; destruct v'.
+    intros. destruct v; destruct v'; try solve [right; unfold not; intro; inversion H].
     - assert ({v = v0} + {v <> v0}) by apply PeanoNat.Nat.eq_dec.
       destruct H.
       + left. rewrite e. reflexivity.
       + right. unfold not. intros. inversion H. contradiction.
-    - right. unfold not. intro. inversion H.
-    - right. unfold not. intro. inversion H.
     - left. trivial.
   Qed.
 
@@ -1343,18 +1272,11 @@ Lemma lemma5 : forall ct ct' gamma e e' lpt lpt',
     alpha ct ct' gamma e e' lpt -> alpha ct ct' gamma e e' (lpt U lpt').
 Proof.
   intros ct ct' gamma e e' lpt lpt' rel.
-  induction rel using alpha_ind_list; eauto.
-  - apply Rel_Field; trivial.
-  - apply Rel_Lib_Field with c d; trivial.
-  - apply Rel_New; trivial.
-  - apply Rel_Lib_New; trivial.
-  - apply Rel_Invk; trivial.
-  - apply Rel_Lib_Invk; trivial.
-  - apply Rel_Cast; trivial.
-  - apply Rel_Lib_Cast; trivial.
-  - apply Rel_Lpt with e'; trivial.
-    apply union_introl; trivial.
+  induction rel using alpha_ind_list; try constructor;
+    try apply Rel_Lib_Field with c d; try apply Rel_Lpt with e'; try apply union_introl; trivial.
 Qed.
+
+(*
 
 Definition not_derived_by_Rel_Lpt
            {ct ct' : class_table} {gamma : context}
@@ -1365,13 +1287,11 @@ Definition not_derived_by_Rel_Lpt
   | _ => fun _ => True
   end rel.
 
-(*
+Inductive eg : Prop :=
+| eg1 : eg
+| eg2 : eg.
 
-Inductive eg : nat -> Prop :=
-| eg1 : forall n, eg n
-| eg2 : forall n, eg n.
-
-Lemma silly : eg1 0 <> eg2 0.
+Lemma silly : eg1 <> eg2.
 Proof. unfold not. intros. discriminate H.
 
 Definition eg_rect := 
@@ -1435,28 +1355,19 @@ Lemma lemma7 : forall ct' e e' lpt lpt' ns,
     AVE_reduce ct' e lpt e' lpt' -> AVE_reduce ct' e (union ns lpt) e' (union ns lpt').
 Proof.
   intros ct' e e' lpt lpt' ns reduce.
-  induction reduce.
-  - apply RA_FJ; trivial.
-  - rewrite union_addr. apply RA_Field with c d; trivial.
-  - rewrite union_addr. apply RA_New; trivial.
-  - rewrite union_addr. apply RA_Invk with c; trivial.
-  - apply RA_Cast; trivial.
-  - rewrite union_addr. rewrite <- union_assoc.
+  induction reduce; try solve [constructor; trivial; try apply union_intror; try apply H]; try rewrite union_addr; try rewrite lemma7addextra;
+    try constructor; try apply RA_Field with c d; try apply RA_Invk with c;
+      try apply RAC_Invk_Arg with e0 e0' n; try apply RAC_New_Arg with e0 e0' n; trivial.
+  - rewrite <- lemma7addextra. rewrite <- union_assoc.
     rewrite (union_comm ns (set_from_list largs)). rewrite union_assoc.
     apply RA_Lib_Invk with d; trivial.
-  - apply RA_Return; trivial. apply union_intror. apply H.
-  - rewrite union_addr. rewrite <- union_assoc. rewrite (union_comm ns lpt'). rewrite union_assoc.
+  - rewrite <- lemma7addextra. rewrite <- union_assoc. rewrite (union_comm ns lpt'). rewrite union_assoc.
     assert (lpt' U ns U lpt = (ns U lpt') U ns U lpt).
     { rewrite <- (union_assoc (ns U lpt') ns lpt).
       rewrite (union_comm ns lpt'). rewrite (union_assoc lpt' ns ns).
       rewrite union_same. rewrite union_assoc. reflexivity. }
     rewrite H0.
     apply RA_Sub with e; trivial. apply union_intror. apply H.
-  - rewrite lemma7addextra. apply RAC_Field; trivial.
-  - rewrite lemma7addextra. apply RAC_Invk_Recv; trivial.
-  - rewrite lemma7addextra. apply RAC_Invk_Arg with e0 e0' n; trivial.
-  - rewrite lemma7addextra. apply RAC_New_Arg with e0 e0' n; trivial.
-  - rewrite lemma7addextra. apply RAC_Cast; trivial.
 Qed.
 
 Lemma lemma8 : forall ct' e e' lpt lpt',
