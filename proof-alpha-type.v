@@ -1,5 +1,3 @@
-(* Test *)
-
 Require Export Coq.Init.Datatypes.
 Require Export Coq.Lists.List.
 Require Export Arith.EqNat.
