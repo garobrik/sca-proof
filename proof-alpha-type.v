@@ -51,14 +51,11 @@ Definition expr_rect_list :=
     | E_Lib => f4
     end.
 
-Definition expr_ind_list :
-  forall P : expr -> Prop,
-    (forall v : var, P (E_Var v)) ->
-    (forall e : expr, P e -> forall f0 : field_id, P (E_Field e f0)) ->
-    (forall (c : class_id) (l : list expr), Forall P l -> P (E_New c l)) ->
-    (forall e : expr, P e -> forall (m : method_id) (l : list expr), Forall P l -> P (E_Invk e m l)) ->
-    (forall (c : class_id) (e : expr), P e -> P (E_Cast c e)) -> P E_Lib -> forall e : expr, P e :=
+Definition expr_ind_list :=
   fun (P : expr -> Prop) => expr_rect_list P (Forall P) (Forall_nil P) (@Forall_cons expr P).
+
+Definition expr_ind_list_t  :=
+  fun (P : expr -> Type) => expr_rect_list P (Forallt P) (Forallt_nil P) (@Forallt_cons expr P).
 
 Definition context := var -> class_id.
 
@@ -410,12 +407,6 @@ Inductive ave_rel (ct ct' : class_table) : Prop :=
               (forall d, (exists c, extends ct c d /\ in_lib ct d /\ in_table ct' c) <-> in_lib ct' d) ->
               ave_rel ct ct'.
 
-
-Inductive Forallt {A : Type} (P : A -> Type) : list A -> Type :=
-  Forallt_nil : Forallt P nil
-| Forallt_cons : forall (x : A) (l : list A), P x -> Forallt P l -> Forallt P (x :: l).
-Arguments Forallt_cons {A P} (x) {l} (_ _).
-
 Inductive alpha (ct ct' : class_table) (gamma : context) : expr -> expr -> set expr -> Type :=
 | Rel_Field : forall e e' f lpt,
     alpha ct ct' gamma e e' lpt ->
@@ -534,15 +525,6 @@ Definition alpha_ind_list :=
     | Rel_Lib_Cast _ _ _ e1 ci lpt a0 => f6 e1 ci lpt a0 (F e1 E_Lib lpt a0)
     | Rel_Lpt _ _ _ e1 e' lpt a0 s0 => f7 e1 e' lpt a0 (F e1 e' lpt a0) s0
     end.
-
-Definition expr_ind_list_t :
-  forall P : expr -> Type,
-    (forall v : var, P (E_Var v)) ->
-    (forall e : expr, P e -> forall f0 : field_id, P (E_Field e f0)) ->
-    (forall (c : class_id) (l : list expr), Forallt P l -> P (E_New c l)) ->
-    (forall e : expr, P e -> forall (m : method_id) (l : list expr), Forallt P l -> P (E_Invk e m l)) ->
-    (forall (c : class_id) (e : expr), P e -> P (E_Cast c e)) -> P E_Lib -> forall e : expr, P e :=
-  fun (P : expr -> Type) => expr_rect_list P (Forallt P) (Forallt_nil P) (@Forallt_cons expr P).
 
 
 Definition subst := list (var * expr).

@@ -54,6 +54,12 @@ Section generic_defs.
     end.
   Definition zip_with_ind {A : Type} (l : list A) := zip_with_ind_h l 0.
 
+  Set Implicit Arguments.
+  Inductive Forallt (A : Type) (P : A -> Type) : list A -> Type :=
+    Forallt_nil : Forallt P nil
+  | Forallt_cons : forall (x : A) (l : list A), P x -> Forallt P l -> Forallt P (x :: l).
+  Unset Implicit Arguments.
+
 End generic_defs.
 
 Notation "a 'U' b" := (union a b) (at level 65, right associativity).
