@@ -384,4 +384,53 @@ Section generic_thms.
         * exists (S n). rewrite Hn. reflexivity.
   Qed.
 
+  Lemma index_of_In : forall {A : Type} (l : list A) (f : A -> bool) (a : A),
+      (forall b, f b = true <-> a = b) -> ((exists n, index_of f l = Some n) <-> In a l).
+  Proof.
+    induction l; split; intros; simpl; try solve [inversion H0].
+    - inversion H0. inversion H1.
+    - destruct H0 as [n Hn]. inversion Hn. destruct (f a) eqn:fa.
+      + apply H in fa. subst. left. reflexivity.
+      + right. specialize (IHl f a0 H). apply IHl. exists (pred n).
+        destruct (index_of f l).
+        * simpl in H1. injection H1 as H2. rewrite <- H2. reflexivity.
+        * inversion H1.
+    - destruct (f a) eqn:fa.
+      + exists 0. reflexivity.
+      + inversion H0.
+        * symmetry in H1. apply H in H1. rewrite H1 in fa. inversion fa.
+        * specialize (IHl f a0 H). apply IHl in H1. destruct H1 as [n Hn].
+          rewrite Hn. simpl. exists (S n). reflexivity.
+  Qed.
+
+  Lemma nth_error_combine : forall {A} l l' n (a a' : A),
+      nth_error l n = Some a -> nth_error l' n = Some a' ->
+      nth_error (combine l l') n = Some (a, a').
+  Proof.
+    induction l; intros; try solve [destruct n; inversion H].
+    destruct n.
+    + destruct l'; inversion H0. inversion H. reflexivity.
+    + destruct l'; try solve [inversion H0]. simpl in H. simpl in H0. simpl.
+      apply IHl; assumption.
+  Qed.
+
+  Lemma index_of_length : forall A (f : A -> bool) l n,
+      index_of f l = Some n -> n < length l.
+  Proof.
+    induction l; intros; try inversion H.
+    destruct (f a) eqn:fa.
+    - inversion H1. simpl. apply le_n_S. apply le_0_n.
+    - destruct (index_of f l) as [m|]; try solve [inversion H1].
+      simpl in H1. inversion H1. simpl. apply Lt.lt_n_S. apply IHl. reflexivity.
+  Qed.
+
+  Lemma nth_error_repeat : forall A n m (a : A),
+      n < m -> nth_error (repeat a m) n = Some a.
+  Proof.
+    intros. generalize dependent n. induction m; intros.
+    - inversion H.
+    - destruct n; try reflexivity.
+      apply Lt.lt_S_n in H. simpl. apply IHm. assumption.
+  Qed.
+
 End generic_thms.
