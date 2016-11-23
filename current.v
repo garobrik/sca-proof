@@ -1,5 +1,113 @@
 Require Import proof.
 
+Lemma RA'_trans : forall ct' e lpt e' lpt' e'' lpt'',
+    AVE_reduce' ct' e lpt e' lpt' ->
+    AVE_reduce' ct' e' lpt' e'' lpt'' ->
+    AVE_reduce' ct' e lpt e'' lpt''.
+Proof.
+  intros ct' e lpt e' lpt' e'' lpt'' red_first. generalize dependent e''. generalize dependent lpt''.
+  dependent induction red_first; intros; try assumption.
+  eapply RA'_step; try eapply IHred_first; eassumption.
+Qed.
+
+Lemma lemma8' : forall (ct' : class_table) (e e' : expr) (lpt lpt' : set expr),
+    AVE_reduce' ct' e lpt e' lpt' -> subset lpt lpt'.
+Proof.
+  intros. induction H.
+  - unfold subset. intros x H. assumption.
+  - apply lemma8 in H. eapply subset_trans; eassumption.
+Qed.
+
+Lemma RAC'_Field : forall ct' e e' lpt lpt' fi,
+    AVE_reduce' ct' e lpt e' lpt' -> AVE_reduce' ct' (E_Field e fi) lpt (E_Field e' fi) (lpt' U lpt).
+Proof.
+  intros.
+  induction H.
+  - rewrite union_same. apply RA'_refl.
+  - eapply RA'_step. apply RAC_Field. apply H.
+    assert (subset lpt lpt') by (eapply lemma8; eassumption).
+    assert (subset lpt' lpt'') by (eapply lemma8'; eassumption).
+    assert (subset lpt lpt'') by (eapply subset_trans; eassumption).
+    repeat (rewrite <- union_include; try assumption).
+    rewrite <- union_include in IHAVE_reduce'; assumption.
+Qed.
+
+Inductive not_derived_by_rel_lpt {ct ct' gamma} : forall {e e' lpt}, alpha ct ct' gamma e e' lpt -> Prop :=
+  N_Rel_Field : forall {e e' : expr} {f : field_id} {lpt : set expr} pf,
+    not_derived_by_rel_lpt (Rel_Field ct ct' gamma e e' f lpt pf)
+| N_Rel_Lib_Field : forall {e : expr} {c : class} {pfc : valid_class ct c} {di : class_id} 
+                    {f : field_id} {lpt : set expr} pf1 pf2 pf3 pf4,
+    not_derived_by_rel_lpt (Rel_Lib_Field ct ct' gamma e c pfc di f lpt pf1 pf2 pf3 pf4)
+| N_Rel_New : forall {ci : class_id} {le le' : list expr} {lpt : set expr} pf1 pf2 pf3,
+    not_derived_by_rel_lpt (Rel_New ct ct' gamma ci le le' lpt pf1 pf2 pf3)
+| N_Rel_Lib_New : forall {ci : class_id} {le : list expr} {lpt : set expr} pf1 pf2,
+    not_derived_by_rel_lpt (Rel_Lib_New ct ct' gamma ci le lpt pf1 pf2)
+| N_Rel_Invk : forall {e e' : expr} {le le' : list expr} {mi : method_id} {lpt : set expr} pf1 pf2 pf3,
+    not_derived_by_rel_lpt (Rel_Invk ct ct' gamma e e' le le' mi lpt pf1 pf2 pf3)
+| N_Rel_Lib_Invk : forall {e : expr} {le : list expr} {mi : method_id} {lpt : set expr} pf1 pf2 pf3,
+    not_derived_by_rel_lpt (Rel_Lib_Invk ct ct' gamma e le mi lpt pf1 pf2 pf3)
+| N_Rel_Cast : forall {e e' : expr} {c : class_id} {lpt : set expr} pf1,
+    not_derived_by_rel_lpt (Rel_Cast ct ct' gamma e e' c lpt pf1)
+| N_Rel_Lib_Cast : forall {e : expr} {ci : class_id} {lpt : set expr} pf1,
+    not_derived_by_rel_lpt (Rel_Lib_Cast ct ct' gamma e ci lpt pf1).
+
+Lemma lemma6 : forall {ct ct' gamma e eh lpt},
+    alpha ct ct' gamma e eh lpt -> calP ct' gamma eh lpt -> exists yh,
+        (exists rel : alpha ct ct' gamma e yh lpt, not_derived_by_rel_lpt rel) /\
+        AVE_reduce' ct' eh lpt yh lpt.
+Proof.
+  intros ct ct' gamma e eh lpt H H0.
+  induction H.
+  - eexists. split; try apply RA'_refl. eexists. apply (N_Rel_Field H).
+  - eexists. split; try apply RA'_refl. eexists. apply (N_Rel_Lib_Field H H1 H2 H3).
+  - eexists. split; try apply RA'_refl. eexists. apply (N_Rel_New H H1 H2).
+  - eexists. split; try apply RA'_refl. eexists. apply (N_Rel_Lib_New H H1).
+  - eexists. split; try apply RA'_refl. eexists. apply (N_Rel_Invk H H1 H2).
+  - eexists. split; try apply RA'_refl. eexists. apply (N_Rel_Lib_Invk H H1 H2).
+  - eexists. split; try apply RA'_refl. eexists. apply (N_Rel_Cast H).
+  - eexists. split; try apply RA'_refl. eexists. apply (N_Rel_Lib_Cast H).
+  - destruct H0 as [_ calPlpt]. apply calPlpt in H1 as calPe'.
+    destruct (IHalpha (conj calPe' calPlpt)) as [dh [[rel not_lpt] red]].
+    eexists. split. eexists. eassumption.
+    eapply RA'_step; try eassumption.
+    apply RA_Return. assumption.
+Qed.
+
+Lemma decl_in_lib_ct_decl_in_lib_ct'_h : forall {ct ct'} (rel : ave_rel ct ct') {c} pfc (pfc' : valid_class ct' c) fi di,
+    declaring_class ct c pfc fi = Some di -> in_lib_id ct di -> pfc' = pfc' ->
+    in_lib_id ct' di.
+Proof.
+  intros ct ct' rel c pfc pfc'.
+  apply simul_induct with (ct := ct) (ct' := ct') (c := c) (pfc := pfc) (pfc' := pfc');
+    try assumption; clear c pfc pfc'; intros; try solve [inversion H].
+  inversion H0.
+  destruct (@existsb field_id (beq_nat fi) (dfields c)) eqn:exstb;
+    try (eapply H; try eassumption; reflexivity).
+  inversion H4. subst. destruct ct' as (app', lib'). exists c.
+  inversion rel as [val_ct _ keep_app _ _]. apply in_lib_id_in_lib in H1 as c_in_lib; try assumption.
+  Focus 2. inversion sca as [[_ sol]|[_ sol]]; [ | apply in_app_in_table]; assumption.
+  assert (pfc' := ValidParent (app', lib') c d pfd' ext' nla' sca').
+  assert (in_table (app', lib') c) by (apply valid_in_table; assumption).
+  destruct H3; try assumption.
+  apply keep_app in H3. destruct nla; split; assumption.
+Qed.
+
+Lemma decl_in_lib_ct_decl_in_lib_ct' : forall {ct ct'} (rel : ave_rel ct ct') {c} pfc (pfc' : valid_class ct' c) fi di,
+    declaring_class ct c pfc fi = Some di -> in_lib_id ct di -> 
+    in_lib_id ct' di.
+Proof.
+  intros. eapply decl_in_lib_ct_decl_in_lib_ct'_h with (pfc'0 := pfc'); try reflexivity; eassumption.
+Qed.
+
+Lemma calPadd : forall ct' gamma e ea lpt,
+    calP ct' gamma e lpt -> calPexpr ct' gamma ea -> calP ct' gamma e (add ea lpt).
+Proof.
+  intros. inversion H as [calPe calPlpt].
+  split; try assumption.
+  intros. destruct H1; auto.
+  inversion H1. subst. assumption.
+Qed.
+
 Lemma lemma11 : forall ct ct' gamma e0 e e' eh lpt,
     ave_rel ct ct' -> FJ_reduce' ct e0 e -> FJ_reduce ct e e' ->
     alpha ct ct' gamma e eh lpt -> calP ct' gamma eh lpt ->
@@ -11,67 +119,82 @@ Proof.
 
 
   (* Case R_Field *)
-  - inversion rel_e_eh.
+  - dependent induction rel_e_eh.
 
 
     (* Subcase Rel_Field *)
-    + subst lpt0. subst f. subst e.
+    + assert (In fi (field_ids ct c pfc)) as In_fields.
+      { assert (forall fi', (beq_nat fi) fi' = true <-> fi = fi').
+        { split; try apply beq_nat_true. intro. subst. symmetry. apply beq_nat_refl. }
+        eapply index_of_In. eassumption. eexists; eassumption. }
+      apply In_fields_decl_exists in In_fields. destruct In_fields as [chi declchi].
       apply valid_in_table in pfc as c_in_table. destruct c_in_table as [c_in_app | c_in_lib].
 
       (* if c is in CT_A *)
-      * inversion H5.
-        -- subst lpt0. subst le0. subst ci.
-           assert (exists ehi, nth_error le' n = Some ehi).
-           { apply nth_error_better_Some. rewrite <- H6. apply nth_error_better_Some. exists ei. trivial. }
-           destruct H1 as [ehi Hehi].
+      * clear IHrel_e_eh. dependent induction rel_e_eh; intros.
+
+        (* SubSubCase Rel_New *)
+        -- assert (exists ehi, nth_error le' n = Some ehi) as exeh.
+           { apply nth_error_better_Some. rewrite <- H0. apply nth_error_better_Some. eexists; eauto. }
+           destruct exeh as [ehi Hehi].
            exists ehi. exists lpt. split.
-           ++ apply RA'_step with ehi lpt; try apply RA'_refl. apply RA_FJ.
-              inversion rel_ct. inversion H3. assert (valid_class ct' c) as pfc'.
-              { apply H12. apply in_app_in_table. apply H8; trivial. }
-              apply R_Field with pfc' n; trivial. rewrite <- (field_ids_same pfc); trivial.
-           ++ subst eh. subst e'. inversion calPehlpt. inversion H1. inversion H8.
+           ++ eapply RA'_step with ehi lpt; try eapply RA'_refl. apply RA_FJ.
+              inversion rel_ct as [_ val_ct' keep_app _ _].
+              destruct val_ct' as [ct' in_table_valid _ _ _ _ _ _]. assert (valid_class ct' c) as pfc'.
+              { apply in_table_valid. apply in_app_in_table. apply keep_app; assumption. }
+              eapply R_Field with (pfc := pfc'); eauto. rewrite <- (field_ids_same pfc); trivial.
+           ++ inversion calPehlpt as [calPeh calPlpt]. inversion calPeh. inversion H6.
               split; try split; try apply Forall_In with le'; try apply nth_error_In with n; try assumption.
               subst. apply Forall_In with (P := fun p => alpha ct ct' gamma (fst p) (snd p) lpt)
                                             (l := combine le le')
                                             (a := (ei, ehi)); try assumption.
               apply nth_error_In with n. apply nth_error_combine; assumption.
+
+        (* SubSubCase Rel_Lib_New, CONTRADICTION  *)
         -- destruct (not_lib_app ct c); trivial; split; trivial. inversion rel_ct.
            apply in_lib_id_in_lib; trivial. apply in_app_in_table; trivial.
-        -- subst e'. subst lpt0. subst eh.
-           inversion rel_ct as [_ _ keep_app _ _].
-           exists E_Lib. eexists. split; try split. eapply RA'_step.
-           eapply RAC_Field. eapply RA_New. eapply RA_Return.
-           eapply RA_FJ. apply R_Field.
 
+        (* SubSubCase Rel_Lpt, Induction  *)
+        -- eapply IHrel_e_eh in rel_ct as IHspec; try reflexivity; try eassumption.
+           destruct IHspec as [eh' [lpt' [red_eh' [rel_eh' calP_eh']]]].
+           exists eh'. exists lpt'. split; try split; try assumption.
+           ++ eapply RA'_trans; try eassumption.
+              eapply RA'_step; try solve [econstructor].
+              rewrite <- union_same. eapply RAC_Field.
+              apply RA_Return. assumption.
+           ++ destruct calPehlpt as [_ calP_lpt].
+              inversion rel_ct as [_ val_ct' keep_app _ _].
+              inversion val_ct' as [ct0 in_table_valid _ _ _ _ _]. clear ct0 H2.
+              assert (valid_class ct' c) as pfc'.
+              { apply in_table_valid, in_app_in_table, keep_app, c_in_app. }
+              split; try assumption. eapply P_Field with (pfc' := pfc'); eauto.
+              erewrite decl_ct'_decl_ct; eassumption.
 
       (* if c is in CT_L *)
-      * inversion H5.
+      * clear IHrel_e_eh. dependent induction rel_e_eh; intros.
 
         (* SubSubCase Rel_New *)
-        -- subst le0. subst lpt0. subst ci.
-           assert (exists ehi, nth_error le' n = Some ehi).
-           { apply nth_error_better_Some. rewrite <- H6. apply nth_error_better_Some. exists ei. trivial. }
-           destruct H1 as [ehi Hehi].
-           exists ehi. exists lpt. split.
+        -- assert (exists ehi, nth_error le' n = Some ehi) as exeh.
+           { apply nth_error_better_Some. rewrite <- H0. apply nth_error_better_Some. exists ei. trivial. }
+           destruct exeh as [ehi Hehi].
+           exists ehi. exists lpt. split; try split.
            ++ apply RA'_step with ehi lpt; try apply RA'_refl. apply RA_FJ.
-              inversion rel_ct. inversion H3.
+              inversion rel_ct as [_ val_ct' _ _ _]. destruct val_ct' as [ct' valid_in_table _ _ _ _ _ _].
               assert (valid_class ct' c) as pfc'.
-              { apply H12. apply in_lib_in_table. apply keep_id_keep_class with ct; assumption. }
+              { apply valid_in_table. apply in_lib_in_table. apply keep_id_keep_class with ct; assumption. }
               apply R_Field with pfc' n; trivial. rewrite <- (field_ids_same pfc); trivial.
-           ++ 
-           ++ apply calPsub with eh; trivial.
-              apply SUB_Trans with e'.
-              ** subst e'. apply SUB_New. apply nth_error_In with n; trivial.
-              ** subst eh. apply SUB_Field.
+           ++ remember (ei, ehi) as p.
+              replace ei with (fst p); try replace ehi with (snd p); try (rewrite Heqp; reflexivity).
+              eapply Forall_In with (P := fun p => alpha ct ct' gamma (fst p) (snd p) lpt).
+              eassumption. eapply nth_error_In. erewrite nth_error_combine; eauto.
+              rewrite Heqp. reflexivity.
+           ++ eapply calPsub; try eassumption.
+              eapply SUB_Trans.
+              ** apply SUB_New. eapply nth_error_In. eassumption.
+              ** eapply SUB_Field.
 
         (* SubSubCase Rel_Lib_New *)
-        -- subst e'. subst le0. subst lpt0. subst ci.
-           assert (In fi (field_ids ct c pfc)).
-           { assert (forall fi', (beq_nat fi) fi' = true <-> fi = fi').
-             { split; try apply beq_nat_true. intro. subst. symmetry. apply beq_nat_refl. }
-             apply (index_of_In (field_ids ct c pfc) (beq_nat fi) fi H1). exists n; assumption. }
-           apply In_fields_decl_exists in H1. destruct H1 as [chi declchi].
-           apply decl_of_in_lib_in_lib in declchi as chi_in_lib; try assumption.
+        -- apply decl_of_in_lib_in_lib in declchi as chi_in_lib; try assumption.
            assert (ch_in_lib := chi_in_lib).
            unfold in_lib_id in ch_in_lib. destruct ct as [app lib].
            destruct ch_in_lib as [ch Hch].
@@ -96,9 +219,9 @@ Proof.
            remember (E_New (id_of ch) (repeat E_Lib (length (fields ct' ch pfch')))) as ch_new.
            assert (in_lib ct' ch).
            { destruct (valid_in_table ct' ch pfch'); try assumption. inversion rel_ct.
-             apply H10 in H2. destruct (not_lib_app (app, lib) ch pfch). split; assumption. }
+             destruct (not_lib_app (app, lib) ch pfch). split; try apply H9; assumption. }
            exists E_Lib. exists (add ch_new lpt).
-           split.
+           split; try split.
            ** apply RA'_step with (E_Field E_Lib fi) (add ch_new lpt).
               { rewrite Heqch_new. apply RA_New. assumption. }
               apply RA'_step with (E_Field ch_new fi) (add ch_new lpt).
@@ -111,31 +234,146 @@ Proof.
               apply R_Field with pfch' m; try assumption.
               apply nth_error_repeat. rewrite fields_field_ids_length.
               apply index_of_length with (beq_nat fi). assumption.
+           ** apply lemma5. eapply Forall_In with (P := fun e  => alpha (app, lib) ct' gamma e E_Lib lpt);
+                              try eapply nth_error_In; eassumption.
            ** split. apply P_Lib. intros. destruct H7.
               apply calPlpt. apply H7. inversion H7. subst x. rewrite Heqch_new.
               apply P_New. apply Forall_repeat. apply P_Lib.
               apply decl_in_table with c0 pfc0' fi. assumption.
 
-        (* SubSubCase Rel_Lpt *) 
-        -- subst. exists (E_Field E_Lib fi). exists lpt. split. apply RA'_refl. assumption.
-
+        (* SubSubCase Rel_Lpt, CONTRADICTION  *)
+        -- eapply IHrel_e_eh in rel_ct as IHspec; try reflexivity; try eassumption.
+           destruct IHspec as [eh' [lpt' [red_eh' [rel_eh' calP_eh']]]].
+           exists eh'. exists lpt'. split; try split; try assumption.
+           ++ eapply RA'_trans; try eassumption.
+              eapply RA'_step; try solve [econstructor].
+              rewrite <- union_same. eapply RAC_Field.
+              apply RA_Return. assumption.
+           ++ destruct calPehlpt as [calPeh calP_lpt].
+              split; try assumption. inversion calPeh. eapply P_Field; try eassumption; apply calP_lpt, H.
 
     (* Subcase Rel_Lib_Field *)
-    + 
+    + assert (In fi (field_ids ct c pfc)) as In_fields.
+      { assert (forall fi', (beq_nat fi) fi' = true <-> fi = fi').
+        { split; try apply beq_nat_true. intro. subst. symmetry. apply beq_nat_refl. }
+        eapply index_of_In. eassumption. eexists; eassumption. }
+      apply In_fields_decl_exists in In_fields. destruct In_fields as [chi declchi].
+      inversion rel_ct as [val_ct val_ct' keep_app _ _ ].
+      inversion val_ct as [ct0 _ _ _ _ same_fi _]. clear ct0 H4.
+      inversion val_ct' as [ct0 in_table_valid' _ _ _ _ _]. clear ct0 H4.
+      assert (di = chi) by (eapply same_fi; eassumption). subst di.
+      apply valid_in_table in pfc as c_in_table. destruct c_in_table as [c_in_app | c_in_lib].
 
+      (* if c is in CT_A *)
+      * clear IHrel_e_eh. dependent induction rel_e_eh; intros.
+
+        (* SubSubCase Rel_Lib_New, CONTRADICTION *)
+        -- destruct (not_lib_app ct c pfc). split; try assumption.
+           apply in_lib_id_in_lib; try apply rel_ct; try apply in_app_in_table; assumption.
+
+        (* SubSubCase Rel_Lpt, INDUCTION  *)
+        -- destruct e'; inversion rel_e_eh; subst;
+             try solve [eapply IHrel_e_eh in rel_ct as IHspec; try reflexivity; try eassumption].
+           clear IHrel_e_eh.
+           assert (exists ehi, nth_error l n = Some ehi) as exeh.
+           { apply nth_error_better_Some. rewrite <- H11. apply nth_error_better_Some. exists ei. trivial. }
+           destruct exeh as [ehi Hehi].
+           assert (valid_class ct' c) as pfc'.
+           { apply in_table_valid', in_app_in_table, keep_app. assumption. }
+           eexists. eexists. split; try split.
+           ++ eapply RA'_step.
+              { eapply RA_Field with (pfc := pfc'). erewrite decl_ct'_decl_ct. eapply declchi. assumption.
+                eapply decl_in_lib_ct_decl_in_lib_ct' with (c1 := c); eassumption. }
+              eapply RA'_step.
+              { eapply RA_Return. right. reflexivity. }
+              eapply RA'_step.
+              { eapply RAC_Field. eapply RA_Return. left. eapply H. }
+              rewrite union_same. eapply RA'_step.
+              { eapply RA_FJ. eapply R_Field with (pfc := pfc'); try eassumption.
+                erewrite <- field_ids_same; eassumption. }
+              apply RA'_refl.
+           ++ remember (ei, ehi) as p.
+              replace ei with (fst p); try replace ehi with (snd p); try (rewrite Heqp; reflexivity).
+              apply lemma5. eapply Forall_In with (P := fun p => alpha ct ct' gamma (fst p) (snd p) lpt).
+              eassumption. eapply nth_error_In. erewrite nth_error_combine; eauto.
+              rewrite Heqp. reflexivity.
+           ++ inversion calPehlpt as [_ calPlpt].
+              eapply calPsub.
+              ** apply calPadd. split. apply calPlpt. eassumption. assumption.
+                 eapply P_Field with (pfc' := pfc'). constructor.
+                 erewrite decl_ct'_decl_ct; eassumption.
+              ** eapply SUB_New, nth_error_In, Hehi.
+
+      (* if c is in CT_L *)
+      * clear IHrel_e_eh. dependent induction rel_e_eh; intros.
+
+        (* SubSubCase Rel_Lib_New *)
+        -- eexists. eexists. split; try split; try eassumption. apply RA'_refl.
+           eapply Forall_In with (P := fun e => alpha ct ct' gamma e E_Lib lpt); try eassumption.
+           eapply nth_error_In; eassumption.
+
+        (* SubSubCase Rel_Lpt, CONTRADICTION  *)
+        -- destruct e'; inversion rel_e_eh; subst;
+             try solve [eapply IHrel_e_eh in rel_ct as IHspec; try reflexivity; try eassumption].
+           clear IHrel_e_eh.
+           assert (exists ehi, nth_error l n = Some ehi) as exeh.
+           { apply nth_error_better_Some. rewrite <- H11. apply nth_error_better_Some. exists ei. trivial. }
+           destruct exeh as [ehi Hehi].
+           assert (valid_class ct' c) as pfc'.
+           { apply in_table_valid'. apply in_lib_in_table. apply keep_id_keep_class with ct; assumption. }
+           eexists. eexists. split; try split.
+           ++ eapply RA'_step.
+              { eapply RA_Field with (pfc := pfc'). erewrite decl_ct'_decl_ct. eapply declchi. assumption.
+                eapply decl_in_lib_ct_decl_in_lib_ct' with (c1 := c); eassumption. }
+              eapply RA'_step.
+              { eapply RA_Return. right. reflexivity. }
+              eapply RA'_step.
+              { eapply RAC_Field. eapply RA_Return. left. eapply H. }
+              rewrite union_same. eapply RA'_step.
+              { eapply RA_FJ. eapply R_Field with (pfc := pfc'); try eassumption.
+                erewrite <- field_ids_same; eassumption. }
+              apply RA'_refl.
+           ++ remember (ei, ehi) as p.
+              replace ei with (fst p); try replace ehi with (snd p); try (rewrite Heqp; reflexivity).
+              apply lemma5.
+              eapply Forall_In with (P := fun p => alpha ct ct' gamma (fst p) (snd p) lpt).
+              eassumption. eapply nth_error_In. erewrite nth_error_combine; eauto.
+              rewrite Heqp. reflexivity.
+           ++ inversion calPehlpt as [_ calPlpt].
+              eapply calPsub.
+              ** apply calPadd. split. apply calPlpt. eassumption. assumption.
+                 eapply P_Field with (pfc' := pfc'). constructor.
+                 erewrite decl_ct'_decl_ct; eassumption.
+              ** eapply SUB_New, nth_error_In, Hehi.
+           
 
     (* Subcase Rel_Lpt *) 
-    + exists E_Lib. exists lpt. split. apply RA'_refl. subst eh. trivial.
+    + eapply IHrel_e_eh in rel_ct as IHspec; try reflexivity; try eassumption.
+      destruct IHspec as [eh' [lpt' [red_eh' [rel_eh' calP_eh']]]].
+      exists eh'. exists lpt'. split; try split; try assumption.
+      ++ eapply RA'_trans; try eassumption.
+         eapply RA'_step; try solve [econstructor].
+         apply RA_Return. assumption.
+      ++ destruct calPehlpt as [_ calP_lpt].
+         split; eauto.
 
 
   (* Case R_Invk *)
   - dependent induction rel_e_eh.
+
+
     (* Subcase Rel_Invk *)
     + admit.
+
+
     (* Subcase Rel_Lib_Invk *)
     + admit.
+
+
     (* Subcase Rel_Lpt *)
     + exists E_Lib. exists lpt. split. apply RA'_refl. trivial.
+
+
   (* Case R_Cast *)
   - dependent induction rel_e_eh.
     (* Subcase Rel_Cast *)

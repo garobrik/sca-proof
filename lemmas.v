@@ -85,12 +85,7 @@ Section generic_thms.
 
   Theorem Forall_In : forall (A : Type) (P : A -> Prop) (l : list A) (a : A),
       Forall P l -> In a l -> P a.
-  Proof.
-    induction l.
-    - intros. inversion H0.
-    - intros. destruct H0; inversion H; eauto.
-      rewrite <- H0. eauto.
-  Qed.
+  Proof. induction l; intros; inversion H0; inversion H; subst; eauto. Qed.
 
   Theorem Forall_repeat : forall (A : Type) (P : A -> Prop) (n : nat) (a : A),
       P a -> Forall P (repeat a n).
@@ -99,6 +94,7 @@ Section generic_thms.
     - apply Forall_nil.
     - apply Forall_cons; assumption.
   Qed.
+
   Theorem find_pair_in_zip : forall (A B : Type) (f : A -> bool) (la : list A) (lb lb' : list B) p p',
       find (fun p => f (fst p)) (combine la lb) = Some p ->
       find (fun p => f (fst p)) (combine la lb') = Some p' ->
@@ -437,6 +433,22 @@ Section generic_thms.
     - inversion H.
     - destruct n; try reflexivity.
       apply Lt.lt_S_n in H. simpl. apply IHm. assumption.
+  Qed.
+
+  Lemma subset_trans : forall {A} (s : set A) s' s'',
+      subset s s' -> subset s' s'' -> subset s s''.
+  Proof. intros A s s' s'' H H0 a a_in_s. apply H0, H, a_in_s. Qed.
+
+  Lemma existsb_find : forall {A} (P : A -> bool) (l : list A),
+      existsb P l = true <-> (exists a, find P l = Some a).
+  Proof.
+    induction l; (split; intros; [| destruct H]; inversion H).
+    - destruct (P a) eqn:Pa; simpl; rewrite Pa.
+      + eexists. reflexivity.
+      + apply IHl. assumption.
+    - destruct (P a) eqn:Pa; simpl; rewrite Pa.
+      + reflexivity.
+      + apply IHl. eexists. eassumption.
   Qed.
 
 End generic_thms.
