@@ -108,6 +108,78 @@ Proof.
   inversion H1. subst. assumption.
 Qed.
 
+Lemma find_method_mresolve_h : forall l mi,
+    existsb (fun a => beq_nat mi match a with Method _ id _ _ => id end) l =
+    existsb (fun a => match a with Method _ id _ _ => beq_nat mi id end) l.
+Proof.
+  induction l; try reflexivity.
+  intros. simpl. destruct a. rewrite IHl. reflexivity.
+Qed.
+
+Lemma check : forall {A B}, A <-> B -> ~ A -> ~ B.
+Proof. intros. intro. apply H in H1. contradiction. Qed.
+
+Lemma find_method_mresolve : forall {ct c} pfc mi,
+    (exists m, find_method mi pfc = Some m) <-> (exists p, mresolve ct mi c pfc = Some p).
+Proof.
+  induction pfc; (split; intros; [destruct H as [m Hm]; inversion Hm | destruct H as [p Hp]; inversion Hp]).
+  - destruct (lookup_method c mi) eqn:find_method.
+    + inversion H0; subst.
+      exists c. simpl. unfold lookup_method in find_method. destruct c; try solve [inversion e].
+      simpl. rewrite existsb_map.
+      assert (existsb (fun a : method => PeanoNat.Nat.eqb mi match a return method_id with
+                                                     | Method _ id _ _ => id
+                                                          end) l0 = true).
+      { rewrite find_method_mresolve_h. apply existsb_find. eexists; eassumption. }
+      rewrite H. reflexivity.
+    + simpl. unfold lookup_method in find_method. destruct c; try solve [inversion e].
+      assert (~ exists m, find (fun m : method => match m with
+                                        | Method _ mi' _ _ => PeanoNat.Nat.eqb mi mi'
+                                          end) l0 = Some m).
+      { intro. destruct H. rewrite find_method in H. inversion H. }
+      eapply check in H. Focus 2. symmetry. apply existsb_find. apply Bool.not_true_is_false in H.
+      simpl. rewrite existsb_map. rewrite find_method_mresolve_h. rewrite H.
+      apply IHpfc. simpl in Hm. rewrite find_method in Hm. eexists. eassumption.
+  - destruct c; try solve [inversion e].
+    destruct (existsb (beq_nat mi) (dmethods_id (C c c0 l c1 l0))) eqn:exstb; simpl in exstb; simpl;
+      rewrite existsb_map, find_method_mresolve_h in exstb.
+    + apply existsb_find in exstb. destruct exstb as [m Hm]. rewrite Hm. eexists. reflexivity.
+    + rewrite <- Bool.not_true_iff_false in exstb. eapply check in exstb. Focus 2. apply existsb_find.
+      apply not_exists_some_iff_none in exstb. rewrite exstb. apply IHpfc. eexists. eassumption.
+Qed.
+
+Ltac try_invert :=
+  try match goal with
+      | [ H : _ |- _ ] => try solve [inversion H]
+      end.
+
+Hint Constructors AVE_reduce. Hint Constructors AVE_reduce'. Hint Resolve RA'_trans.
+Hint Constructors valid_class.
+
+Lemma mresolve_valid : forall {ct c} pfc mi e,
+    mresolve ct mi c pfc = Some e -> valid_class ct e.
+Proof.
+  induction pfc; intros; try_invert.
+  simpl in H. destruct (existsb (beq_nat mi) (dmethods_id c)); inversion H; subst; eauto.
+Qed.
+Hint Resolve mresolve_valid.
+
+Ltac decomp :=
+  repeat match goal with
+         | [ H : _ /\ _ |- _ ] => destruct H
+         | [ H : exists _, _ |- _ ] => destruct H
+         end.
+
+Ltac split_rec n :=
+  match n with
+  | S ?n' => match goal with
+            |[ |- exists _, _ ] => eexists; split_rec n'
+            |[ |- _ /\ _] => split; split_rec n'
+            | _ => idtac
+            end
+  | 0 => idtac
+  end.
+
 Lemma lemma11 : forall ct ct' gamma e0 e e' eh lpt,
     ave_rel ct ct' -> FJ_reduce' ct e0 e -> FJ_reduce ct e e' ->
     alpha ct ct' gamma e eh lpt -> calP ct' gamma eh lpt ->
@@ -348,31 +420,28 @@ Proof.
            
 
     (* Subcase Rel_Lpt *) 
-    + eapply IHrel_e_eh in rel_ct as IHspec; try reflexivity; try eassumption.
-      destruct IHspec as [eh' [lpt' [red_eh' [rel_eh' calP_eh']]]].
-      exists eh'. exists lpt'. split; try split; try assumption.
-      ++ eapply RA'_trans; try eassumption.
-         eapply RA'_step; try solve [econstructor].
-         apply RA_Return. assumption.
-      ++ destruct calPehlpt as [_ calP_lpt].
-         split; eauto.
+    + destruct calPehlpt; eapply IHrel_e_eh in rel_ct; try reflexivity; try split; eauto;
+        decomp; split_rec 4; try eassumption; eauto.
 
 
   (* Case R_Invk *)
-  - dependent induction rel_e_eh.
+  - assert (exists ch, mresolve ct mi c pfc = Some ch).
+    { apply find_method_mresolve. eexists; eassumption. }
+    destruct H1 as [ch mres_ch].
+    assert (valid_class ct ch) as pfch by eauto.
+    dependent induction rel_e_eh; destruct (valid_in_table ct ch pfch);
+      try solve [destruct calPehlpt; eapply IHrel_e_eh in rel_ct; try reflexivity; try split; eauto;
+                 decomp; split_rec 4; try eassumption; eauto]; clear IHrel_e_eh.
 
 
-    (* Subcase Rel_Invk *)
-    + admit.
+    (* Subcase Rel_Invk and mresolve(m, C) in CT_A *)
+    + assert (in_app ct c) by (eapply lemma1; eassumption).
+      split_rec 4.
+      * 
 
 
     (* Subcase Rel_Lib_Invk *)
     + admit.
-
-
-    (* Subcase Rel_Lpt *)
-    + exists E_Lib. exists lpt. split. apply RA'_refl. trivial.
-
 
   (* Case R_Cast *)
   - dependent induction rel_e_eh.

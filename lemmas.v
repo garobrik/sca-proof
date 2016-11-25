@@ -64,6 +64,33 @@ End generic_defs.
 
 Notation "a 'U' b" := (union a b) (at level 65, right associativity).
 Section generic_thms.
+  Lemma not_iff : forall {A B}, A <-> B -> ~ A <-> ~ B.
+  Proof. split; intro; intro; firstorder. Qed.
+
+  Lemma exists_some_iff_not_none : forall {A} (o : option A),
+    (exists a, o = Some a) <-> o <> None.
+  Proof.
+    split; intro.
+    - destruct H. intro. congruence.
+    - destruct o.
+      + eexists. reflexivity.
+      + destruct H. reflexivity.
+  Qed.
+
+  Lemma not_involutive : forall P : Prop,
+      P -> ~ ~ P.
+  Proof.
+    intros. intro. contradiction.
+  Qed.
+
+  Lemma not_exists_some_iff_none : forall {A} (o : option A),
+    ~ (exists a, o = Some a) <-> o = None.
+  Proof.
+    split; intro; [| apply not_involutive in H]; erewrite not_iff in H; [..|symmetry];
+      try apply exists_some_iff_not_none; try assumption.
+    destruct o; try reflexivity. destruct H. congruence.
+  Qed.
+
   Theorem Forall_list_impl : forall (A : Type) (P Q : A -> Prop) (l : list A),
     Forall P l -> Forall (fun a => P a -> Q a) l -> Forall Q l.
   Proof.
@@ -449,6 +476,13 @@ Section generic_thms.
     - destruct (P a) eqn:Pa; simpl; rewrite Pa.
       + reflexivity.
       + apply IHl. eexists. eassumption.
+  Qed.
+
+  Lemma existsb_map : forall {A B} (f : A -> B) (P : B -> bool) (l : list A),
+      existsb P (map f l) = existsb (fun a => P (f a)) l.
+  Proof.
+    induction l; try reflexivity.
+    simpl. destruct (P (f a)); try reflexivity; assumption.
   Qed.
 
 End generic_thms.
