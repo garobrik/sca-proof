@@ -1,0 +1,4 @@
+* Text of Lemma 2 does not match formal statement
+* Exclude Lemma 6
+  The statement of Lemma 6 requires reasoning about the form of an inductive proposition, which is not possible in Coq. Lemma 6 is used to simplify case analysis on the alpha relation, and in particular removes the only inductive step. In the Coq proof the full case analysis is done every time instead of using Lemma 6, but due to automation this doesn't add too much overhead.
+* Missing Rel-* cases when Rel-Lib-* case occurs
