@@ -4,6 +4,15 @@ Require Export Arith.EqNat.
 Require Export Program.Equality.
 Require Export Coq.Logic.ProofIrrelevance.
 
+Ltac inverts n :=
+  match n with
+  | S ?n' => match goal with
+            | [ H : _ |- _ ] => try (inversion H; subst; inverts n')
+            | _ => idtac
+            end
+  | _ => idtac
+  end.
+
 Module E.
   Require Coq.Sets.Ensembles.
   Include Ensembles.
@@ -523,3 +532,14 @@ Proof.
   simpl. destruct (P (f a)); try reflexivity; assumption.
 Qed.
 Hint Resolve existsb_map.
+
+Lemma In_set_from_list_In_list : forall {A} l (a : A),
+    set_In a (set_from_list l) <-> In a l.
+Proof.
+  induction l; split; intros; inverts 2; subst; eauto.
+  - right. apply IHl. eauto.
+  - left. reflexivity.
+Qed.
+Hint Resolve In_set_from_list_In_list.
+
+Hint Resolve nth_error_In.

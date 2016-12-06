@@ -60,105 +60,155 @@ Definition expr_ind_list :
     (forall (c : class_id) (e : expr), P e -> P (E_Cast c e)) -> P E_Lib -> forall e : expr, P e :=
   fun (P : expr -> Prop) => expr_rect_list P (Forall P) (Forall_nil P) (@Forall_cons expr P).
 
-Definition context := var -> class_id.
+Definition context := list (var * class_id).
+
+Definition lookup_context (gamma : context) (v : var) : option class_id :=
+  option_map snd (find (fun p => beq_var v (fst p)) gamma).
 
 Definition params := list (class_id * var_id).
+
 Inductive constr : Type :=
 | Constr : class_id -> params -> list var_id -> list (field_id * var_id) -> constr.
+
 Inductive method := Method : class_id -> method_id -> params -> expr -> method.
 
 Inductive class : Type :=
 | Obj : class
 | C : class_id -> class_id -> list (class_id * field_id) -> constr -> list method -> class.
 
-Section table_defs.
-  Definition class_table : Type := (class_id -> option class) * (class_id -> option class).
+(* Table Definitions *)
 
-  Definition empty_map : class_id -> option class := fun _ => None.
-  Definition ct_app (ct : class_table) : class_table :=
-    match ct with (app, _) => (app, empty_map) end.
-  Definition ct_lib (ct : class_table) : class_table :=
-    match ct with (_, lib) => (empty_map, lib) end.
-  Definition lookup (ct : class_table) (i : class_id) : option class :=
-    match ct with (app, lib) =>
-                  match app i with
-                  | Some c => Some c
-                  | None => lib i
-                  end
-    end.
-  Definition lookup_method (c : class) (mi : method_id) : option method :=
-    match c with
-    | Obj => None
-    | C _ _ _ _ ms => find (fun m => match m with Method _ mi' _ _ => beq_nat mi mi' end) ms
-    end.
-  Definition id_of (c : class) : class_id :=
-    match c with
-    | Obj => obj_id
-    | C ci _ _ _ _ => ci
-    end.
+Definition class_table : Type := (class_id -> option class) * (class_id -> option class).
+Hint Unfold class_table.
 
-  Definition par_id_of (c : class) : option class_id :=
-    match c with
-    | Obj => None
-    | C _ di _ _ _ => Some di
-    end.
+Definition empty_map : class_id -> option class := fun _ => None.
+Hint Unfold empty_map.
 
-  Definition in_lib_id (ct : class_table) (i : class_id) : Prop :=
-    match ct with (_, lib) => exists c, lib i = Some c end.
-  
-  Definition in_app_id (ct : class_table) (i : class_id) : Prop :=
-    match ct with (app, _) => exists c, app i = Some c end.
+Definition ct_app (ct : class_table) : class_table :=
+  match ct with (app, _) => (app, empty_map) end.
 
-  Definition in_lib (ct : class_table) (c : class) : Prop :=
-    match ct with (_, lib) => lib (id_of c) = Some c end.
-  
-  Definition in_app (ct : class_table) (c : class) : Prop :=
-    match ct with (app, _) => app (id_of c) = Some c end.
+Definition ct_lib (ct : class_table) : class_table :=
+  match ct with (_, lib) => (empty_map, lib) end.
 
-  Definition in_table_id (ct : class_table) (i : class_id) : Prop :=
-    in_app_id ct i \/ in_lib_id ct i.
+Definition lookup_class (ct : class_table) (i : class_id) : option class :=
+  match ct with (app, lib) =>
+                match app i with
+                | Some c => Some c
+                | None => lib i
+                end
+  end.
 
-  Definition in_table (ct : class_table) (c : class) : Prop :=
-    in_app ct c \/ in_lib ct c.
+Definition lookup_method (c : class) (mi : method_id) : option method :=
+  match c with
+  | Obj => None
+  | C _ _ _ _ ms => find (fun m => match m with Method _ mi' _ _ => beq_nat mi mi' end) ms
+  end.
 
-End table_defs.
-Section table_lemmas.
-  Lemma in_app_in_table : forall (ct : class_table) (c : class),
+Definition id_of (c : class) : class_id :=
+  match c with
+  | Obj => obj_id
+  | C ci _ _ _ _ => ci
+  end.
+
+Definition par_id_of (c : class) : option class_id :=
+  match c with
+  | Obj => None
+  | C _ di _ _ _ => Some di
+  end.
+
+Definition in_lib_id (ct : class_table) (i : class_id) : Prop :=
+  match ct with (_, lib) => exists c, lib i = Some c end.
+Hint Unfold in_lib_id.
+
+Definition in_app_id (ct : class_table) (i : class_id) : Prop :=
+  match ct with (app, _) => exists c, app i = Some c end.
+Hint Unfold in_app_id.
+
+Definition in_lib (ct : class_table) (c : class) : Prop :=
+  match ct with (_, lib) => lib (id_of c) = Some c end.
+Hint Unfold in_lib.
+
+Definition in_app (ct : class_table) (c : class) : Prop :=
+  match ct with (app, _) => app (id_of c) = Some c end.
+Hint Unfold in_app.
+
+Definition in_table_id (ct : class_table) (i : class_id) : Prop :=
+  in_app_id ct i \/ in_lib_id ct i.
+Hint Unfold in_table_id.
+
+Definition in_table (ct : class_table) (c : class) : Prop :=
+  in_app ct c \/ in_lib ct c.
+Hint Unfold in_table.
+
+(* Table Lemmas *)
+
+Lemma in_app_in_table : forall (ct : class_table) (c : class),
     in_app ct c -> in_table ct c.
-  Proof. intros. unfold in_table. left. apply H. Qed.
-  Lemma in_lib_in_table : forall (ct : class_table) (c : class),
-      in_lib ct c -> in_table ct c.
-  Proof. intros. unfold in_table. right. apply H. Qed.
-  Lemma in_app_in_table_id : forall (ct : class_table) (ci : class_id),
-      in_app_id ct ci -> in_table_id ct ci.
-  Proof. intros. unfold in_table_id. left. apply H. Qed.
-  Lemma in_lib_in_table_id : forall (ct : class_table) (ci : class_id),
-      in_lib_id ct ci -> in_table_id ct ci.
-  Proof. intros. unfold in_table_id. right. apply H. Qed.
-End table_lemmas.
+Proof. eauto. Qed.
+Hint Resolve in_app_in_table.
+
+Lemma in_lib_in_table : forall (ct : class_table) (c : class),
+    in_lib ct c -> in_table ct c.
+Proof. eauto. Qed.
+Hint Resolve in_lib_in_table.
+
+Lemma in_app_in_table_id : forall (ct : class_table) (ci : class_id),
+    in_app_id ct ci -> in_table_id ct ci.
+Proof. eauto. Qed.
+Hint Resolve in_app_in_table_id.
+
+Lemma in_lib_in_table_id : forall (ct : class_table) (ci : class_id),
+    in_lib_id ct ci -> in_table_id ct ci.
+Proof. eauto. Qed.
+Hint Resolve in_lib_in_table_id.
+
+Lemma in_app_in_app_id : forall ct c,
+    in_app ct c -> in_app_id ct (id_of c).
+Proof.
+  intros. destruct ct; eexists; eauto.
+Qed.
+Hint Resolve in_app_in_app_id.
+
+Lemma in_lib_in_lib_id : forall ct c,
+    in_lib ct c -> in_lib_id ct (id_of c).
+Proof.
+  intros. destruct ct; eexists; eauto.
+Qed.
+Hint Resolve in_lib_in_lib_id.
+
+Lemma in_table_in_table_id : forall ct c,
+    in_table ct c -> in_table_id ct (id_of c).
+Proof.
+  intros. destruct H; eauto.
+Qed.
+Hint Resolve in_table_in_table_id.
+
+(* More Definitions *)
+
 Definition extends (ct : class_table) (c d : class) : Prop :=
   match c with
   | Obj => False
-  | C _ di _ _ _ => lookup ct di = Some d
+  | C _ di _ _ _ => lookup_class ct di = Some d
   end.
 
 Definition extends_id (ct : class_table) (ci di : class_id) : Prop :=
-  match lookup ct ci with
+  match lookup_class ct ci with
   | None => False
   | Some Obj => False
   | Some (C _ di' _ _ _) => di = di'
   end.
 
 Inductive subtype (ct : class_table) : class -> class -> Type :=
-| S_Ref : forall (c : class), subtype ct c c
+| S_Ref : forall (c : class), in_table ct c -> subtype ct c c
 | S_Trans : forall (c d e : class), subtype ct c d -> subtype ct d e -> subtype ct c e
-| S_Sub : forall (c d : class), extends ct c d -> subtype ct c d.
+| S_Sub : forall (c d : class), in_table ct c -> extends ct c d -> subtype ct c d.
+Hint Constructors subtype.
 
 Inductive subtype_id (ct : class_table) : class_id -> class_id -> Prop :=
 | SI_Ref : forall ci, in_table_id ct ci -> subtype_id ct ci ci
 | SI_Sub : forall ci di, extends_id ct ci di -> subtype_id ct ci di
 | SI_Trans : forall ci di ei, subtype_id ct ci di -> subtype_id ct di ei -> subtype_id ct ci ei.
-
+Hint Constructors subtype_id.
 
 Inductive valid_class (ct : class_table) : class -> Type :=
 | ValidObj : in_lib ct Obj -> ~ in_app ct Obj -> valid_class ct Obj
@@ -167,13 +217,16 @@ Inductive valid_class (ct : class_table) : class -> Type :=
     ~ (in_lib ct c /\ in_app ct c) ->
     (in_lib ct d /\ in_table ct c) \/ (in_app ct d /\ in_app ct c)  ->
     valid_class ct c.
+Hint Constructors valid_class.
 
 Definition body (m : method) : expr := match m with Method _ _ _ e => e end.
+
 Definition args (m : method) : list var :=
     match m with
     | Method _ _ l _ => map Var (map snd l)
     end.
 Definition mid (m : method) : method_id := match m with Method _ mi _ _ => mi end.
+
 Fixpoint find_method {ct : class_table} {c : class} (mi : method_id) (pfc : valid_class ct c) : option method :=
   match pfc with
   | ValidObj _ _ _ => None
@@ -182,6 +235,7 @@ Fixpoint find_method {ct : class_table} {c : class} (mi : method_id) (pfc : vali
                                | None => find_method mi pfd
                                end
   end.
+
 Fixpoint mtype (ct : class_table) (mi : method_id) (c : class) (pfc : valid_class ct c) :
   option (list class_id * class_id) :=
   match pfc with
@@ -210,7 +264,7 @@ Fixpoint field_ids (ct : class_table) (c : class) (pfc : valid_class ct c) : lis
 Definition lookup_field (ct : class_table) (c : class) (pfc : valid_class ct c) (f : field_id) : option class_id :=
   find (beq_nat f) (fields ct c pfc).
 Inductive type_of (ct : class_table) (gamma : context) : expr -> class_id -> Prop :=
-| T_Var : forall x, type_of ct gamma (E_Var x) (gamma x)
+| T_Var : forall x ci, lookup_context gamma x = Some ci -> type_of ct gamma (E_Var x) ci
 | T_Field : forall e c pfc di f,
     type_of ct gamma e (id_of c) -> lookup_field ct c pfc f = Some di ->
     type_of ct gamma (E_Field e f) di
@@ -227,12 +281,14 @@ Inductive type_of (ct : class_table) (gamma : context) : expr -> class_id -> Pro
     Forall (fun p => subtype_id ct (fst p) (snd p)) (combine lc ld) ->
     type_of ct gamma (E_New ci le) ci
 | T_Cast : forall e0 ci di, type_of ct gamma e0 di -> type_of ct gamma (E_Cast ci e0) ci.
+Hint Constructors type_of.
 
 Definition type_of_ind_list :=
-  fun (ct : class_table) (gamma : context) (P : expr -> class_id -> Prop) (f : forall x : var, P (E_Var x) (gamma x))
-  (f0 : forall (e : expr) (c : class) (pfc : valid_class ct c) (di : class_id) (f0 : field_id),
+  fun (ct : class_table) (gamma : context) (P : expr -> class_id -> Prop)
+    (f : forall (x : var) (ci : class_id), lookup_context gamma x = Some ci -> P (E_Var x) ci)
+    (f0 : forall (e : expr) (c : class) (pfc : valid_class ct c) (di : class_id) (f0 : field_id),
         type_of ct gamma e (id_of c) -> P e (id_of c) -> lookup_field ct c pfc f0 = Some di -> P (E_Field e f0) di)
-  (f1 : forall (c : class) (ci : class_id) (pfc : valid_class ct c) (le : list expr) (lc ld : list class_id),
+    (f1 : forall (c : class) (ci : class_id) (pfc : valid_class ct c) (le : list expr) (lc ld : list class_id),
         id_of c = ci ->
         fields ct c pfc = ld ->
         length ld = length le ->
@@ -241,8 +297,8 @@ Definition type_of_ind_list :=
         Forall (fun p : class_id * class_id => subtype_id ct (fst p) (snd p)) (combine lc ld) ->
         Forall (fun p : expr * class_id => P (fst p) (snd p)) (combine le lc) ->
         P (E_New ci le) ci)
-  (f2 : forall (e0 : expr) (c0 : class) (ci0 : class_id) (pfc0 : valid_class ct c0) (ld : list class_id)
-          (ret : class_id) (mi : method_id) (le : list expr) (lc : list class_id),
+    (f2 : forall (e0 : expr) (c0 : class) (ci0 : class_id) (pfc0 : valid_class ct c0) (ld : list class_id)
+            (ret : class_id) (mi : method_id) (le : list expr) (lc : list class_id),
         id_of c0 = ci0 ->
         type_of ct gamma e0 ci0 ->
         P e0 ci0 ->
@@ -253,13 +309,13 @@ Definition type_of_ind_list :=
         Forall (fun p : class_id * class_id => subtype_id ct (fst p) (snd p)) (combine lc ld) ->
         Forall (fun p : expr * class_id => P (fst p) (snd p)) (combine le lc) ->
         P (E_Invk e0 mi le) ci0)
-  (f3 : forall (e0 : expr) (ci di : class_id), type_of ct gamma e0 di -> P e0 di -> P (E_Cast ci e0) ci) =>
-fix F (e : expr) (c : class_id) (t : type_of ct gamma e c) {struct t} : P e c :=
-  match t in (type_of _ _ e0 c0) return (P e0 c0) with
-  | T_Var _ _ x => f x
-  | T_Field _ _ e0 c0 pfc di f4 t0 e1 => f0 e0 c0 pfc di f4 t0 (F e0 (id_of c0) t0) e1
-  | T_New _ _ c0 ci pfc le lc ld e0 e1 e2 e3 f4 f5 =>
-    f1 c0 ci pfc le lc ld e0 e1 e2 e3 f4 f5
+    (f3 : forall (e0 : expr) (ci di : class_id), type_of ct gamma e0 di -> P e0 di -> P (E_Cast ci e0) ci) =>
+    fix F (e : expr) (c : class_id) (t : type_of ct gamma e c) {struct t} : P e c :=
+    match t in (type_of _ _ e0 c0) return (P e0 c0) with
+    | T_Var _ _ x ci H  => f x ci H
+    | T_Field _ _ e0 c0 pfc di f4 t0 e1 => f0 e0 c0 pfc di f4 t0 (F e0 (id_of c0) t0) e1
+    | T_New _ _ c0 ci pfc le lc ld e0 e1 e2 e3 f4 f5 =>
+      f1 c0 ci pfc le lc ld e0 e1 e2 e3 f4 f5
          (let Q := (fun p => type_of ct gamma (fst p) (snd p)) in
           let P' := (fun p => P (fst p) (snd p)) in
           (fix f_impl (l : list (expr * class_id)) (F_Q : Forall Q l) : Forall P' l :=
@@ -267,7 +323,7 @@ fix F (e : expr) (c : class_id) (t : type_of ct gamma e c) {struct t} : P e c :=
              | Forall_nil _ => Forall_nil P'
              | @Forall_cons _ _ p l' Qp Ql' => Forall_cons p (F (fst p) (snd p) Qp) (f_impl l' Ql')
              end) (combine le lc) f4)
-  | T_Invk _ _ e0 c0 ci0 pfc0 ld ret mi le lc e1 t0 e2 e3 e4 f4 f5 =>
+    | T_Invk _ _ e0 c0 ci0 pfc0 ld ret mi le lc e1 t0 e2 e3 e4 f4 f5 =>
       f2 e0 c0 ci0 pfc0 ld ret mi le lc e1 t0 (F e0 ci0 t0) e2 e3 e4 f4 f5
          (let Q := (fun p => type_of ct gamma (fst p) (snd p)) in
           let P' := (fun p => P (fst p) (snd p)) in
@@ -276,17 +332,20 @@ fix F (e : expr) (c : class_id) (t : type_of ct gamma e c) {struct t} : P e c :=
              | Forall_nil _ => Forall_nil P'
              | @Forall_cons _ _ p l' Qp Ql' => Forall_cons p (F (fst p) (snd p) Qp) (f_impl l' Ql')
              end) (combine le lc) f4)
-  | T_Cast _ _ e0 ci di t0 => f3 e0 ci di t0 (F e0 di t0)
-  end.
+    | T_Cast _ _ e0 ci di t0 => f3 e0 ci di t0 (F e0 di t0)
+    end.
+
 Inductive type_checks (ct : class_table) (gamma : context) : expr -> Prop :=
-| TC_Var : forall x, in_table_id ct (gamma x) -> type_checks ct gamma (E_Var x)
+| TC_Var : forall x ci, lookup_context gamma x = Some ci -> in_table_id ct ci -> type_checks ct gamma (E_Var x)
 | TC_Field : forall e f di, type_of ct gamma (E_Field e f) di -> in_table_id ct di -> type_checks ct gamma e ->
                        type_checks ct gamma (E_Field e f)
 | TC_New : forall ci le, in_table_id ct ci -> Forall (type_checks ct gamma) le -> type_checks ct gamma (E_New ci le)
 | TC_Invk : forall e m le di, type_of ct gamma (E_Invk e m le) di -> in_table_id ct di ->
                       type_checks ct gamma e -> Forall (type_checks ct gamma) le ->
                       type_checks ct gamma (E_Invk e m le)
-| TC_Cast : forall e di, in_table_id ct di -> type_checks ct gamma e -> type_checks ct gamma (E_Cast di e).
+| TC_Cast : forall e di, in_table_id ct di -> type_checks ct gamma e -> type_checks ct gamma (E_Cast di e)
+| TC_Lib : type_checks ct gamma E_Lib.
+Hint Constructors type_checks.
 
 Definition dfields (c : class) : list field_id :=
   match c with
@@ -307,10 +366,7 @@ Definition dmethods (c : class) : list method :=
   end.
 
 Definition dmethods_id (c : class) : list method_id :=
-  match c with
-  | Obj => nil
-  | C _ _ _ _ ms => map (fun m => match m with Method _ id _ _ => id end) ms
-  end.
+  map mid (dmethods c).
 
 Fixpoint mresolve (ct : class_table) (mi : method_id) (c : class) (pfc : valid_class ct c) : option class :=
   match pfc with
@@ -343,6 +399,57 @@ Inductive valid_expr (ct : class_table) (gamma : context) : expr -> Prop :=
     type_checks ct gamma (E_Cast ci e) -> valid_expr ct gamma e -> valid_expr ct gamma (E_Cast ci e)
 | Val_Lib : valid_expr ct gamma E_Lib.
 
+Definition valid_expr_ind_list :=
+  fun (ct : class_table) (gamma : context) (P : expr -> Prop)
+    (f : forall x : var, type_checks ct gamma (E_Var x) -> P (E_Var x))
+    (f0 : forall (e : expr) (f0 : field_id) (ci : class_id) (c : class) (pfc : valid_class ct c),
+        type_checks ct gamma (E_Field e f0) ->
+        type_of ct gamma e ci ->
+        id_of c = ci ->
+        (exists di : class_id, declaring_class ct c pfc f0 = Some di) ->
+        valid_expr ct gamma e -> P e -> P (E_Field e f0))
+    (f1 : forall (ci : class_id) (le : list expr),
+        type_checks ct gamma (E_New ci le) ->
+        Forall (valid_expr ct gamma) le ->
+        Forall P le ->
+        P (E_New ci le))
+    (f2 : forall (e : expr) (m : method_id) (le : list expr) (ci : class_id) (c : class) (pfc : valid_class ct c),
+        type_checks ct gamma (E_Invk e m le) ->
+        valid_expr ct gamma e ->
+        P e ->
+        Forall (valid_expr ct gamma) le ->
+        Forall P le ->
+        type_of ct gamma e ci ->
+        id_of c = ci ->
+        (exists d : class, mresolve ct m c pfc = Some d) ->
+        P (E_Invk e m le))
+    (f3 : forall (ci : class_id) (e : expr),
+        type_checks ct gamma (E_Cast ci e) -> valid_expr ct gamma e -> P e -> P (E_Cast ci e)) 
+    (f4 : P E_Lib) =>
+    fix F (e : expr) (v : valid_expr ct gamma e) {struct v} : P e :=
+    match v in (valid_expr _ _ e0) return (P e0) with
+    | Val_Var _ _ x t => f x t
+    | Val_Field _ _ e0 f5 ci c pfc t t0 e1 e2 v0 => f0 e0 f5 ci c pfc t t0 e1 e2 v0 (F e0 v0)
+    | Val_New _ _ ci le t f5 => f1 ci le t f5
+         (let Q := valid_expr ct gamma in
+          let P' := P in
+          (fix f_impl (l : list expr) (F_Q : Forall Q l) : Forall P' l :=
+             match F_Q with
+             | Forall_nil _ => Forall_nil P'
+             | @Forall_cons _ _ e l' Qp Ql' => Forall_cons e (F e Qp) (f_impl l' Ql')
+             end) le f5)
+    | Val_Invk _ _ e0 m le ci c pfc t v0 f5 t0 e1 e2 => f2 e0 m le ci c pfc t v0 (F e0 v0) f5 
+         (let Q := valid_expr ct gamma in
+          let P' := P in
+          (fix f_impl (l : list expr) (F_Q : Forall Q l) : Forall P' l :=
+             match F_Q with
+             | Forall_nil _ => Forall_nil P'
+             | @Forall_cons _ _ e l' Qp Ql' => Forall_cons e (F e Qp) (f_impl l' Ql')
+             end) le f5) t0 e1 e2
+    | Val_Cast _ _ ci e0 t v0 => f3 ci e0 t v0 (F e0 v0)
+    | Val_Lib _ _ => f4
+    end.
+
 Inductive fj_expr : expr -> Prop :=
 | FJ_Var : forall x, fj_expr (E_Var x)
 | FJ_Field : forall e f, fj_expr e -> fj_expr (E_Field e f)
@@ -359,16 +466,13 @@ Inductive expr_In : var -> expr -> Prop :=
 | EIn_Invk : forall v e m le, Exists (expr_In v) le \/ expr_In v e -> expr_In v (E_Invk e m le)
 | EIn_Cast : forall v e c, expr_In v e -> expr_In v (E_Cast c e).
 
-Definition valid_method (m : method) : Prop :=
-  match m with
-  | Method _ _ lcv e =>
-    forall v, expr_In v e -> v = This \/ In v (map Var (map snd lcv))
-  end.
+Definition valid_method ct gamma (m : method) : Prop :=
+  (forall v, expr_In v (body m) -> In v (This :: args m)) /\ valid_expr ct gamma (body m).
 
 Inductive valid_table : class_table -> Prop :=
 | VT : forall ct, (forall c, in_table ct c -> valid_class ct c) ->
-             (forall c, in_table ct c -> lookup ct (id_of c) = Some c) ->
-             (forall ci c, lookup ct ci = Some c -> ci = id_of c) ->
+             (forall c, in_table ct c -> lookup_class ct (id_of c) = Some c) ->
+             (forall ci c, lookup_class ct ci = Some c -> ci = id_of c) ->
              (forall ci, ~ (in_lib_id ct ci /\ in_app_id ct ci)) ->
              (forall c pfc c' pfc' fi di di',
                  declaring_class ct c pfc fi = Some di ->
@@ -444,7 +548,6 @@ Inductive alpha (ct ct' : class_table) (gamma : context) : expr -> expr -> set e
     alpha ct ct' gamma e E_Lib lpt -> alpha ct ct' gamma (E_Cast ci e) E_Lib lpt
 | Rel_Lpt : forall e e' lpt,
     alpha ct ct' gamma e e' lpt -> set_In e' lpt -> alpha ct ct' gamma e E_Lib lpt.
-Print alpha_ind.
 
 Definition alpha_ind_list :=
   fun (ct ct' : class_table) (gamma : context) (P : expr -> expr -> set expr -> Prop)
@@ -530,6 +633,7 @@ Definition alpha_ind_list :=
     | Rel_Lib_Cast _ _ _ e1 ci lpt a0 => f6 e1 ci lpt a0 (F e1 E_Lib lpt a0)
     | Rel_Lpt _ _ _ e1 e' lpt a0 s0 => f7 e1 e' lpt a0 (F e1 e' lpt a0) s0
     end.
+Hint Constructors alpha.
 
 Definition subst := list (var * expr).
 
@@ -547,9 +651,8 @@ Fixpoint do_sub (sig : subst) (e : expr) : expr :=
   end.
 
 Definition valid_sub (ct : class_table) (gamma : context) (sig : subst) : Prop :=
-  Forall (fun p => type_of ct gamma (snd p) (gamma (fst p))) sig.
+  Forall (fun p => exists ci, lookup_context gamma (fst p) = Some ci /\ type_of ct gamma (snd p) ci) sig.
 
-Print expr.
 Inductive calPexpr (ct' : class_table) (gamma : context) : expr -> Prop :=
 | P_Var : forall v, calPexpr ct' gamma (E_Var v)
 | P_Field : forall e fi c pfc' di,
@@ -565,680 +668,681 @@ Inductive calPexpr (ct' : class_table) (gamma : context) : expr -> Prop :=
     calPexpr ct' gamma e -> in_table_id ct' ci ->
     calPexpr ct' gamma (E_Cast ci e)
 | P_Lib : calPexpr ct' gamma E_Lib.
+Hint Constructors calPexpr.
+
 Definition calP ct' gamma e lpt :=
   calPexpr ct' gamma e /\ (forall e0, set_In e0 lpt -> calPexpr ct' gamma e0).
-Section lemmas.
-  Lemma not_lib_app : forall (ct : class_table) (c : class) (pfc : valid_class ct c),
+Hint Unfold calP.
+
+(* Lemmas *)
+
+Lemma not_lib_app : forall (ct : class_table) (c : class) (pfc : valid_class ct c),
     ~ (in_lib ct c /\ in_app ct c).
-  Proof.
-    intros ct c pfc. inversion pfc; trivial.
-    unfold not. intros [_ in_app]. contradiction.
-  Qed.
+Proof.
+  intros ct c pfc. inversion pfc; trivial.
+  unfold not. intros [_ in_app]. contradiction.
+Qed.
+Hint Resolve not_lib_app.
 
-
-  Lemma eq_valid : forall (ct : class_table) (c d : class) (pfc : valid_class ct c),
+Lemma eq_valid : forall (ct : class_table) (c d : class) (pfc : valid_class ct c),
     c = d -> valid_class ct d.
-  Proof.
-    intros ct c d pfc cdeq.
-    destruct pfc.
-    - rewrite <- cdeq. apply ValidObj; trivial. 
-    - apply ValidParent with d0; try rewrite <- cdeq; trivial.
-  Qed.
+Proof.
+  intros ct c d pfc cdeq.
+  destruct pfc.
+  - rewrite <- cdeq. apply ValidObj; trivial. 
+  - apply ValidParent with d0; try rewrite <- cdeq; trivial.
+Qed.
+Hint Resolve eq_valid.
 
-  Lemma valid_in_table : forall (ct : class_table) (c : class) (pfc : valid_class ct c),
-      in_table ct c.
-  Proof.
-    intros ct c pfc. inversion pfc.
-    - apply in_lib_in_table. apply H.
-    - destruct H2.
-      * apply H2.
-      * apply in_app_in_table. apply H2.
-  Qed.
+Lemma valid_in_table : forall (ct : class_table) (c : class) (pfc : valid_class ct c),
+    in_table ct c.
+Proof.
+  intros ct c pfc. inversion pfc.
+  - apply in_lib_in_table. apply H.
+  - destruct H2.
+    * apply H2.
+    * apply in_app_in_table. apply H2.
+Qed.
+Hint Resolve valid_in_table.
 
-  Lemma id_eq : forall (ct : class_table) c d (pfc : valid_class ct c) (pfd : valid_class ct d),
-      valid_table ct -> id_of c = id_of d -> c = d.
-  Proof.
-    intros ct c d pfc pfd pft eq_id. destruct pft as [ct _ look_id _].
-    apply valid_in_table in pfc. apply valid_in_table in pfd.
-    apply look_id in pfc. apply look_id in pfd.
-    rewrite eq_id in pfc. rewrite pfd in pfc. inversion pfc. reflexivity.
-  Qed.
+Lemma id_eq : forall (ct : class_table) c d (pfc : valid_class ct c) (pfd : valid_class ct d),
+    valid_table ct -> id_of c = id_of d -> c = d.
+Proof.
+  intros ct c d pfc pfd pft eq_id. destruct pft as [ct _ look_id _].
+  apply valid_in_table in pfc. apply valid_in_table in pfd.
+  apply look_id in pfc. apply look_id in pfd.
+  rewrite eq_id in pfc. rewrite pfd in pfc. inversion pfc. reflexivity.
+Qed.
+Hint Resolve id_eq.
 
-  Lemma in_ct_lib_in_lib : forall (ct : class_table) (c : class),
-      in_table (ct_lib ct) c -> in_lib ct c.
-  Proof.
-    intros ct c in_ct_lib.
-    unfold ct_lib, in_table in in_ct_lib; unfold in_lib; destruct ct.
-    destruct in_ct_lib.
-    - unfold in_app in H. unfold empty_map in H. inversion H.
-    - unfold in_lib in H. apply H.
-  Qed.
+Lemma in_ct_lib_in_lib : forall (ct : class_table) (c : class),
+    in_table (ct_lib ct) c -> in_lib ct c.
+Proof.
+  intros ct c in_ct_lib.
+  unfold ct_lib, in_table in in_ct_lib; unfold in_lib; destruct ct.
+  destruct in_ct_lib.
+  - unfold in_app in H. unfold empty_map in H. inversion H.
+  - unfold in_lib in H. apply H.
+Qed.
+Hint Resolve in_ct_lib_in_lib.
 
-  Lemma in_ct_lib_in_lib_id : forall (ct : class_table) (ci : class_id),
-      in_table_id (ct_lib ct) ci -> in_lib_id ct ci.
-  Proof.
-    intros ct c in_ct_lib_id.
-    unfold ct_lib, in_table_id in in_ct_lib_id; unfold in_lib_id; destruct ct.
-    destruct in_ct_lib_id.
-    - unfold in_app_id in H. unfold empty_map in H. destruct H. inversion H.
-    - unfold in_lib_id in H. apply H.
-  Qed.
+Lemma in_ct_lib_in_lib_id : forall (ct : class_table) (ci : class_id),
+    in_table_id (ct_lib ct) ci -> in_lib_id ct ci.
+Proof.
+  intros ct c in_ct_lib_id.
+  unfold ct_lib, in_table_id in in_ct_lib_id; unfold in_lib_id; destruct ct.
+  destruct in_ct_lib_id.
+  - unfold in_app_id in H. unfold empty_map in H. destruct H. inversion H.
+  - unfold in_lib_id in H. apply H.
+Qed.
+Hint Resolve in_ct_lib_in_lib_id.
 
-  Lemma valid_obj_Valid_Obj : forall ct (pfc : valid_class ct Obj), exists h1 h2,
-        pfc = ValidObj ct h1 h2.
-  Proof.
-    intros ct pfc. dependent destruction pfc.
-    - exists i, n. reflexivity.
-    - inversion e.
-  Qed.
+Lemma valid_obj_Valid_Obj : forall ct (pfc : valid_class ct Obj), exists h1 h2,
+      pfc = ValidObj ct h1 h2.
+Proof.
+  intros ct pfc. dependent destruction pfc.
+  - exists i, n. reflexivity.
+  - inversion e.
+Qed.
+Hint Resolve valid_obj_Valid_Obj.
 
-  Lemma ext_in_lib_ext_in_ct :
-    forall (ct : class_table) (pft : valid_table ct) (c d : class) (pfd : valid_class ct d),
-      extends (ct_lib ct) c d -> extends ct c d.
-  Proof.
-    intros ct pft c d pfd ext_in_lib.
-    destruct c.
-    - inversion ext_in_lib.
-    - simpl. simpl in ext_in_lib.
-      assert (c0 = id_of d).
-      { inversion pft. apply H1. destruct ct as [app lib]. simpl. destruct (app c0) eqn:appc0; try assumption.
-        destruct (H2 c0). split; simpl. exists d. assumption. exists c2. assumption. }
-      subst. inversion pft. apply H0. apply valid_in_table. assumption.
-  Qed.
+Lemma ext_in_lib_ext_in_ct :
+  forall (ct : class_table) (pft : valid_table ct) (c d : class) (pfd : valid_class ct d),
+    extends (ct_lib ct) c d -> extends ct c d.
+Proof.
+  intros ct pft c d pfd ext_in_lib.
+  destruct c.
+  - inversion ext_in_lib.
+  - simpl. simpl in ext_in_lib.
+    assert (c0 = id_of d).
+    { inversion pft. apply H1. destruct ct as [app lib]. simpl. destruct (app c0) eqn:appc0; try assumption.
+      destruct (H2 c0). split; simpl. exists d. assumption. exists c2. assumption. }
+    subst. inversion pft. apply H0. apply valid_in_table. assumption.
+Qed.
+Hint Resolve ext_in_lib_ext_in_ct.
 
-  Lemma ext_in_lib_ext_in_ct_id :
-    forall (ct : class_table) (pft : valid_table ct) (ci di : class_id),
-      in_table_id ct ci -> extends_id (ct_lib ct) ci di -> extends_id ct ci di.
-  Proof.
-    intros _ [[app lib] _ _ _ nlai] ci di ci_in_ct ext_in_lib.
-    unfold extends_id. simpl. unfold extends_id in ext_in_lib. simpl in ext_in_lib.
-    destruct (app ci) eqn:appci; trivial.
-    destruct (lib ci) eqn:libci; try solve [inversion ext_in_lib].
-    simpl in nlai. specialize (nlai ci). destruct nlai. split.
-    - exists c0. assumption.
-    - exists c. assumption.
-  Qed.
+Lemma ext_in_lib_ext_in_ct_id :
+  forall (ct : class_table) (pft : valid_table ct) (ci di : class_id),
+    in_table_id ct ci -> extends_id (ct_lib ct) ci di -> extends_id ct ci di.
+Proof.
+  intros _ [[app lib] _ _ _ nlai] ci di ci_in_ct ext_in_lib.
+  unfold extends_id. simpl. unfold extends_id in ext_in_lib. simpl in ext_in_lib.
+  destruct (app ci) eqn:appci; trivial.
+  destruct (lib ci) eqn:libci; try solve [inversion ext_in_lib].
+  simpl in nlai. specialize (nlai ci). destruct nlai. split.
+  - exists c0. assumption.
+  - exists c. assumption.
+Qed.
+Hint Resolve ext_in_lib_ext_in_ct_id.
 
-  Lemma valid_in_lib_in_lib : forall ct c (pfc : valid_class (ct_lib ct) c),
-      in_lib ct c.
-  Proof.
-    intros ct c pfc.
-    destruct ct as [app lib]. simpl.
-    apply valid_in_table in pfc. unfold in_table in pfc. destruct pfc.
-    - simpl in H. unfold empty_map in H. inversion H.
-    - simpl in H. trivial.
-  Qed.
+Lemma valid_in_lib_in_lib : forall ct c (pfc : valid_class (ct_lib ct) c),
+    in_lib ct c.
+Proof.
+  intros ct c pfc.
+  destruct ct as [app lib]. simpl.
+  apply valid_in_table in pfc. unfold in_table in pfc. destruct pfc.
+  - simpl in H. unfold empty_map in H. inversion H.
+  - simpl in H. trivial.
+Qed.
+Hint Resolve valid_in_lib_in_lib.
 
-  Lemma decl_in_lib_in_lib : forall ct c (pfc : valid_class (ct_lib ct) c) fi di,
-      declaring_class (ct_lib ct) c pfc fi = Some di -> in_lib_id ct di.
-  Proof.
-    intros ct c pfc fi di decl_in_lib.
-    remember pfc as pfc'.
-    induction pfc'.
-    - simpl in decl_in_lib. inversion decl_in_lib.
-    - simpl in decl_in_lib. destruct (@existsb field_id (beq_nat fi) (dfields c)).
-      + inversion decl_in_lib. destruct ct as [app lib]. simpl. clear Heqpfc'.
-        apply valid_in_lib_in_lib in pfc. simpl in pfc. exists c. trivial.
-      + apply IHpfc' with pfc'. trivial. trivial.
-  Qed.
+Lemma decl_in_lib_in_lib : forall ct c (pfc : valid_class (ct_lib ct) c) fi di,
+    declaring_class (ct_lib ct) c pfc fi = Some di -> in_lib_id ct di.
+Proof.
+  intros ct c pfc fi di decl_in_lib.
+  remember pfc as pfc'.
+  induction pfc'.
+  - simpl in decl_in_lib. inversion decl_in_lib.
+  - simpl in decl_in_lib. destruct (@existsb field_id (beq_nat fi) (dfields c)).
+    + inversion decl_in_lib. destruct ct as [app lib]. simpl. clear Heqpfc'.
+      apply valid_in_lib_in_lib in pfc. simpl in pfc. exists c. trivial.
+    + apply IHpfc' with pfc'. trivial. trivial.
+Qed.
+Hint Resolve decl_in_lib_in_lib.
 
-  Lemma supertype_valid : forall (ct : class_table) (c d : class) (pfc : valid_class ct c),
-      subtype ct c d -> valid_class ct d.
-  Proof.
-    intros ct c d pfc subtyp. induction subtyp.
-    - eauto. 
-    - eauto. 
-    - inversion pfc.
-      + subst. inversion e.
-      + replace d with d0; eauto.
-        { apply extends_injective with (c := c) (ct := ct); eauto. }
-  Qed.
+Lemma supertype_valid : forall (ct : class_table) (c d : class) (pfc : valid_class ct c),
+    subtype ct c d -> valid_class ct d.
+Proof.
+  intros ct c d pfc subtyp. induction subtyp.
+  - eauto. 
+  - eauto. 
+  - inversion pfc.
+    + subst. inversion e.
+    + replace d with d0; eauto.
+      { apply extends_injective with (c := c) (ct := ct); eauto. }
+Qed.
+Hint Resolve supertype_valid.
 
-  Lemma supertype_lib_in_lib : forall (ct : class_table) (c d : class) (pfc : valid_class ct c), 
-      subtype ct c d -> in_lib ct c -> in_lib ct d.
-  Proof.
-    intros ct c d pfc subtyp c_in_lib. induction subtyp.
-    - apply c_in_lib.
-    - apply IHsubtyp2.
-      apply supertype_valid with (c := c). eauto. eauto.
-      apply IHsubtyp1. eauto. eauto.
-    - inversion pfc. 
-      + subst. inversion e.
-      + assert (d = d0).
-        { apply extends_injective with (c:= c) (ct := ct); eauto. }
-        destruct H2.
-        * destruct H2. subst. eauto.
-        * destruct H2. destruct H1. split; eauto. 
-  Qed.
+Lemma supertype_lib_in_lib : forall (ct : class_table) (c d : class) (pfc : valid_class ct c), 
+    subtype ct c d -> in_lib ct c -> in_lib ct d.
+Proof.
+  intros ct c d pfc subtyp c_in_lib. induction subtyp.
+  - apply c_in_lib.
+  - apply IHsubtyp2.
+    apply supertype_valid with (c := c). eauto. eauto.
+    apply IHsubtyp1. eauto. eauto.
+  - inversion pfc. 
+    + subst. inversion e.
+    + assert (d = d0).
+      { apply extends_injective with (c:= c) (ct := ct); eauto. }
+      destruct H2.
+      * destruct H2. subst. eauto.
+      * destruct H2. destruct H1. split; eauto. 
+Qed.
+Hint Resolve supertype_lib_in_lib.
 
-  Lemma lib_par_same : forall ct (pft : valid_table ct) c d pfc_l pfd_l ext nla sca pfc,
-      pfc_l = ValidParent (ct_lib ct) c d pfd_l ext nla sca ->
-      exists ext' nla' sca' pfd, pfc = ValidParent ct c d pfd ext' nla' sca'.
-  Proof.
-    intros. remember pfc as pfc'. destruct pfc.
-    - inversion ext.
-    - assert (d = d0); try subst d.
-      { apply extends_injective with ct c; trivial.
-        - inversion pft. apply ext_in_lib_ext_in_ct; trivial.
-          apply H0. apply in_lib_in_table. apply valid_in_lib_in_lib. trivial. }
-      exists e, n, o, pfc. trivial.
-  Qed.
+Lemma lib_par_same : forall ct (pft : valid_table ct) c d pfc_l pfd_l ext nla sca pfc,
+    pfc_l = ValidParent (ct_lib ct) c d pfd_l ext nla sca ->
+    exists ext' nla' sca' pfd, pfc = ValidParent ct c d pfd ext' nla' sca'.
+Proof.
+  intros. remember pfc as pfc'. destruct pfc.
+  - inversion ext.
+  - assert (d = d0); try subst d.
+    { apply extends_injective with ct c; trivial.
+      - inversion pft. apply ext_in_lib_ext_in_ct; trivial.
+        apply H0. apply in_lib_in_table. apply valid_in_lib_in_lib. trivial. }
+    exists e, n, o, pfc. trivial.
+Qed.
+Hint Resolve lib_par_same.
 
-  Lemma simul_induct_lib :
-    forall (ct : class_table) (pft : valid_table ct) (P : forall ct c, valid_class (ct_lib ct) c -> valid_class ct c -> Prop),
-      (forall o1 o2 o1' o2', P ct Obj (ValidObj (ct_lib ct) o1 o2) (ValidObj ct o1' o2')) ->
-      (forall c d pfd_l pfd ext nla sca ext' nla' sca',
-          P ct d pfd_l pfd ->
-          P ct c (ValidParent (ct_lib ct) c d pfd_l ext nla sca) (ValidParent ct c d pfd ext' nla' sca')) ->
-      forall c pfc_l pfc, P ct c pfc_l pfc.
-  Proof. 
-    intros ct pft P Hobj Hind c pfc_l. 
-    remember pfc_l as pfc_lr. induction pfc_l.
-    - intros. assert (exists h1 h2, pfc = ValidObj ct h1 h2). apply valid_obj_Valid_Obj.
-      destruct H as [x [y id]]. rewrite id. rewrite Heqpfc_lr. apply Hobj.
-    - intros. assert (exists ext' nla' sca' pfd, pfc = ValidParent ct c d pfd ext' nla' sca').
-      { apply lib_par_same with pfc_lr pfc_l e n o; trivial. }
-      destruct H as [ext' [nla' [sca' [pfd H']]]].
-      rewrite H'. rewrite Heqpfc_lr. apply Hind. apply IHpfc_l. trivial.
-  Qed.
-  Lemma rel_par_same : forall ct ct' (rel : ave_rel ct ct') c d pfc pfd ext nla sca pfc',
-      pfc = ValidParent ct c d pfd ext nla sca ->
-      exists ext' nla' sca' pfd', pfc' = ValidParent ct' c d pfd' ext' nla' sca'.
-  Proof.
-    intros. remember pfc' as pfc''. inversion rel as [val_ct val_ct' keep_app keep_ext keep_lib]. destruct pfc'.
-    - inversion ext.
-    - assert (d = d0) as deq.
-      { apply extends_injective with ct' c.
-        - trivial.
-        - apply keep_ext. split.
-          + assumption.
-          + destruct o.
-            * apply a.
-            * apply in_app_in_table. apply a.
-        - trivial. }
-      rewrite deq.
-      exists e, n, o, pfc'. trivial.
-  Qed.
+Lemma simul_induct_lib :
+  forall (ct : class_table) (pft : valid_table ct) (P : forall ct c, valid_class (ct_lib ct) c -> valid_class ct c -> Prop),
+    (forall o1 o2 o1' o2', P ct Obj (ValidObj (ct_lib ct) o1 o2) (ValidObj ct o1' o2')) ->
+    (forall c d pfd_l pfd ext nla sca ext' nla' sca',
+        P ct d pfd_l pfd ->
+        P ct c (ValidParent (ct_lib ct) c d pfd_l ext nla sca) (ValidParent ct c d pfd ext' nla' sca')) ->
+    forall c pfc_l pfc, P ct c pfc_l pfc.
+Proof. 
+  intros ct pft P Hobj Hind c pfc_l. 
+  remember pfc_l as pfc_lr. induction pfc_l.
+  - intros. assert (exists h1 h2, pfc = ValidObj ct h1 h2). apply valid_obj_Valid_Obj.
+    destruct H as [x [y id]]. rewrite id. rewrite Heqpfc_lr. apply Hobj.
+  - intros. assert (exists ext' nla' sca' pfd, pfc = ValidParent ct c d pfd ext' nla' sca').
+    { apply lib_par_same with pfc_lr pfc_l e n o; trivial. }
+    destruct H as [ext' [nla' [sca' [pfd H']]]].
+    rewrite H'. rewrite Heqpfc_lr. apply Hind. apply IHpfc_l. trivial.
+Qed.
 
-  Lemma simul_induct :
-    forall (ct ct' : class_table) (rel : ave_rel ct ct') 
-      (P : forall ct ct' rel c, valid_class ct c -> valid_class ct' c -> Prop),
-      (forall o1 o2 o1' o2', P ct ct' rel Obj (ValidObj ct o1 o2) (ValidObj ct' o1' o2')) ->
-      (forall c d pfd pfd' ext nla sca ext' nla' sca',
-          P ct ct' rel d pfd pfd' ->
-          P ct ct' rel c (ValidParent ct c d pfd ext nla sca) (ValidParent ct' c d pfd' ext' nla' sca')) ->
-      forall c pfc pfc', P ct ct' rel c pfc pfc'.
-  Proof. 
-    intros ct ct' rel P Hobj Hind c pfc. inversion rel as [val_ct val_ct' keep_app keep_ext keep_lib].
-    remember pfc as pfc_r. induction pfc.
-    - intros. assert (exists h1 h2, pfc' = ValidObj ct' h1 h2). apply valid_obj_Valid_Obj.
-      destruct H as [x [y id]]. rewrite id. rewrite Heqpfc_r. apply Hobj.
-    - intros. assert (exists ext' nla' sca' pfd, pfc' = ValidParent ct' c d pfd ext' nla' sca').
-      { apply rel_par_same with ct pfc_r pfc e n o.
-        - trivial.
-        - trivial. }
-      destruct H as [ext' [nla' [sca' [pfd' H']]]].
-      rewrite H'. rewrite Heqpfc_r. apply Hind. apply IHpfc. trivial.
-  Qed.
+Lemma rel_par_same : forall ct ct' (rel : ave_rel ct ct') c d pfc pfd ext nla sca pfc',
+    pfc = ValidParent ct c d pfd ext nla sca ->
+    exists ext' nla' sca' pfd', pfc' = ValidParent ct' c d pfd' ext' nla' sca'.
+Proof.
+  intros. remember pfc' as pfc''. inversion rel as [val_ct val_ct' keep_app keep_ext keep_lib]. destruct pfc'.
+  - inversion ext.
+  - assert (d = d0) as deq.
+    { apply extends_injective with ct' c.
+      - trivial.
+      - apply keep_ext. split.
+        + assumption.
+        + destruct o.
+          * apply a.
+          * apply in_app_in_table. apply a.
+      - trivial. }
+    rewrite deq.
+    exists e, n, o, pfc'. trivial.
+Qed.
+Hint Resolve rel_par_same.
 
-  
-  Lemma val_in_lib_val_in_ct :
-    forall (ct : class_table) (c : class) (pfc : valid_class (ct_lib ct) c),
-      (forall c, in_table ct c -> valid_class ct c) -> valid_class ct c.
-  Proof.
-    intros ct c pfc H.
-    apply H. apply in_lib_in_table. apply valid_in_lib_in_lib. trivial.
-  Qed.
+Lemma simul_induct :
+  forall (ct ct' : class_table) (rel : ave_rel ct ct') 
+    (P : forall ct ct' rel c, valid_class ct c -> valid_class ct' c -> Prop),
+    (forall o1 o2 o1' o2', P ct ct' rel Obj (ValidObj ct o1 o2) (ValidObj ct' o1' o2')) ->
+    (forall c d pfd pfd' ext nla sca ext' nla' sca',
+        P ct ct' rel d pfd pfd' ->
+        P ct ct' rel c (ValidParent ct c d pfd ext nla sca) (ValidParent ct' c d pfd' ext' nla' sca')) ->
+    forall c pfc pfc', P ct ct' rel c pfc pfc'.
+Proof. 
+  intros ct ct' rel P Hobj Hind c pfc. inversion rel as [val_ct val_ct' keep_app keep_ext keep_lib].
+  remember pfc as pfc_r. induction pfc.
+  - intros. assert (exists h1 h2, pfc' = ValidObj ct' h1 h2). apply valid_obj_Valid_Obj.
+    destruct H as [x [y id]]. rewrite id. rewrite Heqpfc_r. apply Hobj.
+  - intros. assert (exists ext' nla' sca' pfd, pfc' = ValidParent ct' c d pfd ext' nla' sca').
+    { apply rel_par_same with ct pfc_r pfc e n o.
+      - trivial.
+      - trivial. }
+    destruct H as [ext' [nla' [sca' [pfd' H']]]].
+    rewrite H'. rewrite Heqpfc_r. apply Hind. apply IHpfc. trivial.
+Qed.
 
-  Lemma fields_in_lib_fields_in_ct :
-    forall (ct : class_table) (pft : valid_table ct) (c : class) (pfc_l : valid_class (ct_lib ct) c) (pfc : valid_class ct c),
-      fields (ct_lib ct) c pfc_l = fields ct c pfc.
-  Proof.
-    intros ct pft c pfc_l pfc.
-    apply simul_induct_lib with (ct := ct) (c := c) (pfc_l := pfc_l) (pfc := pfc); trivial.
-    intros. simpl. destruct c0; trivial.
-    rewrite H. trivial.
-  Qed.
+Lemma val_in_lib_val_in_ct :
+  forall (ct : class_table) (c : class) (pfc : valid_class (ct_lib ct) c),
+    (forall c, in_table ct c -> valid_class ct c) -> valid_class ct c.
+Proof.
+  intros ct c pfc H.
+  apply H. apply in_lib_in_table. apply valid_in_lib_in_lib. trivial.
+Qed.
+Hint Resolve val_in_lib_val_in_ct.
 
-  Lemma mtype_in_lib_mtype_in_ct :
-    forall (ct : class_table) (pft : valid_table ct) (c : class) (pfc_l : valid_class (ct_lib ct) c) (pfc : valid_class ct c) mi,
-      mtype (ct_lib ct) mi c pfc_l = mtype ct mi c pfc.
-  Proof.
-    intros ct pft c pfc_l pfc mi.
-    apply simul_induct_lib with (ct := ct) (c := c) (pfc_l := pfc_l) (pfc := pfc); trivial.
-    intros. simpl. destruct (lookup_method c0 mi); trivial.
-  Qed.
+Lemma fields_in_lib_fields_in_ct :
+  forall (ct : class_table) (pft : valid_table ct) (c : class) (pfc_l : valid_class (ct_lib ct) c) (pfc : valid_class ct c),
+    fields (ct_lib ct) c pfc_l = fields ct c pfc.
+Proof.
+  intros ct pft c pfc_l pfc.
+  apply simul_induct_lib with (ct := ct) (c := c) (pfc_l := pfc_l) (pfc := pfc); trivial.
+  intros. simpl. destruct c0; trivial.
+  rewrite H. trivial.
+Qed.
+Hint Resolve fields_in_lib_fields_in_ct.
 
-  Lemma subtyp_id_lib_sybtyp_id_ct : forall (ct : class_table) (ci : class_id) (di : class_id),
-      valid_table ct -> subtype_id (ct_lib ct) ci di -> subtype_id ct ci di.
-  Proof.
-    intros ct ci di pft subtyp_id_lib.
-    induction subtyp_id_lib.
-    - apply SI_Ref. apply in_lib_in_table_id. apply in_ct_lib_in_lib_id. trivial.
-    - apply SI_Sub. apply ext_in_lib_ext_in_ct_id; eauto. apply in_lib_in_table_id. destruct ct as [app lib].
-      simpl in H. simpl. unfold extends_id in H. destruct (lookup (empty_map, lib) ci) eqn:look; try inversion H.
-      simpl in look. exists c. trivial. 
-    - apply SI_Trans with di; trivial.
-  Qed.
+Lemma mtype_in_lib_mtype_in_ct :
+  forall (ct : class_table) (pft : valid_table ct) (c : class) (pfc_l : valid_class (ct_lib ct) c) (pfc : valid_class ct c) mi,
+    mtype (ct_lib ct) mi c pfc_l = mtype ct mi c pfc.
+Proof.
+  intros ct pft c pfc_l pfc mi.
+  apply simul_induct_lib with (ct := ct) (c := c) (pfc_l := pfc_l) (pfc := pfc); trivial.
+  intros. simpl. destruct (lookup_method c0 mi); trivial.
+Qed.
+Hint Resolve mtype_in_lib_mtype_in_ct.
 
-  Lemma typ_in_lib_typ_in_ct :
-    forall (ct : class_table) (pft : valid_table ct) (gamma : context) (e : expr) (ci : class_id),
-      type_of (ct_lib ct) gamma e ci -> type_of ct gamma e ci.
-  Proof.
-    intros ct pft gamma e ci typ_in_lib.
-    induction typ_in_lib using type_of_ind_list.
-    - apply T_Var.
-    - inversion pft. assert (valid_class ct c) as pfc'.
-      { apply val_in_lib_val_in_ct; trivial. } clear H0 H1 H2 H3 H4.
-      apply T_Field with c pfc'; trivial.
-      unfold lookup_field. unfold lookup_field in H.
-      assert (fields (ct_lib ct) c pfc = fields ct c pfc') by (apply fields_in_lib_fields_in_ct; trivial).
-      rewrite <- H0. trivial.
-    - inversion pft. assert (valid_class ct c) as pfc'.
-      { apply val_in_lib_val_in_ct; trivial. } clear H6 H7 H8 H9 H10.
-      apply T_New with c pfc' lc ld; trivial.
-      + rewrite <- fields_in_lib_fields_in_ct with (pfc_l := pfc); trivial.
-      + eapply Forall_impl; try eassumption.
-        intros. apply subtyp_id_lib_sybtyp_id_ct; trivial.
-    - inversion pft. assert (valid_class ct c0) as pfc0'.
-      { apply val_in_lib_val_in_ct; trivial. } clear H6 H7 H8 H9 H10.
-      apply T_Invk with c0 pfc0' ld ret lc; trivial.
-      * assert (mtype (ct_lib ct) mi c0 pfc0 = mtype ct mi c0 pfc0').
-        { apply mtype_in_lib_mtype_in_ct; trivial. }
-        rewrite <- H6. trivial.
-      * eapply Forall_impl; try eassumption.
-        intros a H6. apply subtyp_id_lib_sybtyp_id_ct; trivial.
-    - apply T_Cast with di; trivial.
-  Qed.
+Lemma subtyp_id_lib_sybtyp_id_ct : forall (ct : class_table) (ci : class_id) (di : class_id),
+    valid_table ct -> subtype_id (ct_lib ct) ci di -> subtype_id ct ci di.
+Proof.
+  intros ct ci di pft subtyp_id_lib.
+  induction subtyp_id_lib.
+  - apply SI_Ref. apply in_lib_in_table_id. apply in_ct_lib_in_lib_id. trivial.
+  - apply SI_Sub. apply ext_in_lib_ext_in_ct_id; eauto. apply in_lib_in_table_id. destruct ct as [app lib].
+    simpl in H. simpl. unfold extends_id in H. destruct (lookup_class (empty_map, lib) ci) eqn:look; try inversion H.
+    simpl in look. exists c. trivial. 
+  - apply SI_Trans with di; trivial.
+Qed.
+Hint Resolve subtyp_id_lib_sybtyp_id_ct.
 
-  Lemma decl_in_lib_decl_in_ct :
-    forall (ct : class_table) (pft : valid_table ct) (c : class) (pfc : valid_class ct c) (pfc_l : valid_class (ct_lib ct) c) fi,
-      declaring_class (ct_lib ct) c pfc_l fi = declaring_class ct c pfc fi.
-    intros ct pft c pfc pfc_l.
-    apply simul_induct_lib with (ct := ct) (c := c) (pfc_l := pfc_l) (pfc := pfc); trivial.
-    clear c pfc pfc_l. intros c d pfd_l pfd ext nla sca ext' nla' sca' IHd fi.
-    simpl. destruct (@existsb field_id (beq_nat fi) (dfields c)); trivial.
-  Qed.
+Lemma typ_in_lib_typ_in_ct :
+  forall (ct : class_table) (pft : valid_table ct) (gamma : context) (e : expr) (ci : class_id),
+    type_of (ct_lib ct) gamma e ci -> type_of ct gamma e ci.
+Proof.
+  intros ct pft gamma e ci typ_in_lib.
+  induction typ_in_lib using type_of_ind_list.
+  - eauto.
+  - inversion pft. assert (valid_class ct c) as pfc'.
+    { apply val_in_lib_val_in_ct; trivial. } clear H0 H1 H2 H3 H4.
+    apply T_Field with c pfc'; trivial.
+    unfold lookup_field. unfold lookup_field in H.
+    assert (fields (ct_lib ct) c pfc = fields ct c pfc') by (apply fields_in_lib_fields_in_ct; trivial).
+    rewrite <- H0. trivial.
+  - inversion pft. assert (valid_class ct c) as pfc'.
+    { apply val_in_lib_val_in_ct; trivial. } clear H6 H7 H8 H9 H10.
+    apply T_New with c pfc' lc ld; trivial.
+    + rewrite <- fields_in_lib_fields_in_ct with (pfc_l := pfc); trivial.
+    + eapply Forall_impl; try eassumption.
+      intros. apply subtyp_id_lib_sybtyp_id_ct; trivial.
+  - inversion pft. assert (valid_class ct c0) as pfc0'.
+    { apply val_in_lib_val_in_ct; trivial. } clear H6 H7 H8 H9 H10.
+    apply T_Invk with c0 pfc0' ld ret lc; trivial.
+    * assert (mtype (ct_lib ct) mi c0 pfc0 = mtype ct mi c0 pfc0').
+      { apply mtype_in_lib_mtype_in_ct; trivial. }
+      rewrite <- H6. trivial.
+    * eapply Forall_impl; try eassumption.
+      intros a H6. apply subtyp_id_lib_sybtyp_id_ct; trivial.
+  - apply T_Cast with di; trivial.
+Qed.
+Hint Resolve typ_in_lib_typ_in_ct.
 
-  Lemma mresolve_lib_ct :
-    forall ct (pft : valid_table ct) c (pfc_l : valid_class (ct_lib ct) c) (pfc : valid_class ct c) mi,
-      mresolve (ct_lib ct) mi c pfc_l = mresolve ct mi c pfc.
-  Proof.
-    intros ct pft c pfc_l pfc.
-    apply simul_induct_lib with (ct := ct) (c := c) (pfc_l := pfc_l) (pfc := pfc); trivial.
-    clear c pfc pfc_l. intros c d pfd_l pfd ext nla sca ext' nla' sca' IHd mi.
-    simpl. destruct (existsb (beq_nat mi) (dmethods_id c)); trivial.
-  Qed.
+Lemma decl_in_lib_decl_in_ct :
+  forall (ct : class_table) (pft : valid_table ct) (c : class) (pfc : valid_class ct c) (pfc_l : valid_class (ct_lib ct) c) fi,
+    declaring_class (ct_lib ct) c pfc_l fi = declaring_class ct c pfc fi.
+  intros ct pft c pfc pfc_l.
+  apply simul_induct_lib with (ct := ct) (c := c) (pfc_l := pfc_l) (pfc := pfc); trivial.
+  clear c pfc pfc_l. intros c d pfd_l pfd ext nla sca ext' nla' sca' IHd fi.
+  simpl. destruct (@existsb field_id (beq_nat fi) (dfields c)); trivial.
+Qed.
+Hint Resolve decl_in_lib_decl_in_ct.
 
-  Lemma invk_valid_in_lib_m_in_lib : forall (ct : class_table) e le mi (gamma : context),
-      valid_expr (ct_lib ct) gamma (E_Invk e mi le) -> exists c, in_lib ct c /\ In mi (dmethods_id c).
-  Proof.
-    intros ct e le mi gamma val_e.
-    inversion val_e. clear H6. remember pfc as pfc'. induction pfc.
-    - rewrite Heqpfc' in H7. simpl in H7. destruct H7 as [d cont]. inversion cont.
-    - rewrite Heqpfc' in H7. simpl in H7. destruct (existsb (beq_nat mi) (dmethods_id c)) eqn:exstb. 
-      + exists c. split.
-        * apply in_ct_lib_in_lib. apply valid_in_table. trivial.
-        * rewrite existsb_exists in exstb. destruct exstb as [mi' [Inmi' Heqmi]].
-          rewrite beq_nat_true_iff in Heqmi. rewrite Heqmi. trivial.
-      + apply IHpfc with pfc; trivial.
-  Qed.
+Lemma mresolve_lib_ct :
+  forall ct (pft : valid_table ct) c (pfc_l : valid_class (ct_lib ct) c) (pfc : valid_class ct c) mi,
+    mresolve (ct_lib ct) mi c pfc_l = mresolve ct mi c pfc.
+Proof.
+  intros ct pft c pfc_l pfc.
+  apply simul_induct_lib with (ct := ct) (c := c) (pfc_l := pfc_l) (pfc := pfc); trivial.
+  clear c pfc pfc_l. intros c d pfd_l pfd ext nla sca ext' nla' sca' IHd mi.
+  simpl. destruct (existsb (beq_nat mi) (dmethods_id c)); trivial.
+Qed.
+Hint Resolve mresolve_lib_ct.
 
-  Lemma find_In_var : forall lv v,
-      In v lv <-> find (fun v' => beq_var v' v) lv <> None.
-  Proof.
-    split; induction lv; intros; eauto; simpl; simpl in H.
-    - destruct H.
-      + rewrite H. rewrite <- beq_var_refl. unfold not. intro. inversion H0.
-      + destruct (beq_var a v); eauto. unfold not. intro. inversion H0.
-    - apply H. reflexivity.
-    - destruct (beq_var a v) eqn:beq_av.
-      + left. apply beq_var_true. eauto.
-      + right. apply IHlv. trivial.
-  Qed.
+Lemma invk_valid_in_lib_m_in_lib : forall (ct : class_table) e le mi (gamma : context),
+    valid_expr (ct_lib ct) gamma (E_Invk e mi le) -> exists c, in_lib ct c /\ In mi (dmethods_id c).
+Proof.
+  intros ct e le mi gamma val_e.
+  inversion val_e. clear H6. remember pfc as pfc'. induction pfc.
+  - rewrite Heqpfc' in H7. simpl in H7. destruct H7 as [d cont]. inversion cont.
+  - rewrite Heqpfc' in H7. simpl in H7. destruct (existsb (beq_nat mi) (dmethods_id c)) eqn:exstb. 
+    + exists c. split.
+      * apply in_ct_lib_in_lib. apply valid_in_table. trivial.
+      * rewrite existsb_exists in exstb. destruct exstb as [mi' [Inmi' Heqmi]].
+        rewrite beq_nat_true_iff in Heqmi. rewrite Heqmi. trivial.
+    + apply IHpfc with pfc; trivial.
+Qed.
+Hint Resolve invk_valid_in_lib_m_in_lib.
 
-  Lemma type_checks_lib_ct : forall (ct : class_table) (gamma : context) (e : expr),
-      valid_table ct -> type_checks (ct_lib ct) gamma e -> type_checks ct gamma e.
-  Proof.
-    intros ct gamma e pft typ_lib. 
-    induction e using expr_ind_list.
-    - inversion typ_lib. apply TC_Var. unfold in_table. right. apply in_ct_lib_in_lib_id; trivial.
-    - inversion typ_lib. apply TC_Field with di; trivial.
-      + apply typ_in_lib_typ_in_ct; trivial.
-      + unfold in_table. right. apply in_ct_lib_in_lib_id; trivial.
-      + apply IHe; trivial.
-    - inversion typ_lib. apply TC_New; trivial.
-      + unfold in_table. right. apply in_ct_lib_in_lib_id; trivial.
-      + eapply Forall_list_impl; eassumption.
-    - inversion typ_lib. apply TC_Invk with di; trivial.
-      + apply typ_in_lib_typ_in_ct; trivial.
-      + unfold in_table. right. apply in_ct_lib_in_lib_id; trivial.
-      + apply IHe. trivial.
-      + eapply Forall_list_impl; eassumption.
-    - inversion typ_lib. apply TC_Cast; trivial.
-      + unfold in_table. right. apply in_ct_lib_in_lib_id; trivial.
-      + apply IHe; trivial.
-    - inversion typ_lib.
-  Qed.
+Lemma find_In_var : forall lv v,
+    In v lv <-> find (fun v' => beq_var v' v) lv <> None.
+Proof.
+  split; induction lv; intros; eauto; simpl; simpl in H.
+  - destruct H.
+    + rewrite H. rewrite <- beq_var_refl. unfold not. intro. inversion H0.
+    + destruct (beq_var a v); eauto. unfold not. intro. inversion H0.
+  - apply H. reflexivity.
+  - destruct (beq_var a v) eqn:beq_av.
+    + left. apply beq_var_true. eauto.
+    + right. apply IHlv. trivial.
+Qed.
+Hint Resolve find_In_var.
 
-  Lemma valid_expr_lib_ct : forall (ct : class_table) (gamma : context) (e : expr),
-      valid_table ct -> valid_expr (ct_lib ct) gamma e -> valid_expr ct gamma e.
-  Proof.
-    intros ct gamma e pft val_lib.
-    induction e using expr_ind_list.
-    - inversion val_lib. apply Val_Var; trivial. apply type_checks_lib_ct; trivial.
-    - inversion val_lib. rename pfc into pfc_l.
-      inversion pft. assert (valid_class ct c) as pfc.
-      { apply val_in_lib_val_in_ct; trivial. } clear H6 H7 H8 H9 H10.
-      apply Val_Field with ci c pfc; eauto.
-      + apply type_checks_lib_ct; trivial.
-      + apply typ_in_lib_typ_in_ct; trivial.
-      + rewrite <- decl_in_lib_decl_in_ct with (pfc_l := pfc_l); trivial.
-    - inversion val_lib. apply Val_New; trivial.
-      + apply type_checks_lib_ct; trivial.
-      + eapply Forall_list_impl; eassumption.
-    - inversion val_lib. rename pfc into pfc_l.
-      inversion pft. assert (valid_class ct c) as pfc.
-      { apply val_in_lib_val_in_ct; trivial. } clear H9 H10 H11 H12 H13.
-      apply Val_Invk with ci c pfc; trivial.
-      + apply type_checks_lib_ct; trivial.
-      + apply IHe; trivial.
-      + eapply Forall_list_impl; eassumption.
-      + apply typ_in_lib_typ_in_ct; trivial.
-      + erewrite <- mresolve_lib_ct; eassumption.
-    - inversion val_lib. apply Val_Cast; trivial.
-      + apply type_checks_lib_ct; trivial.
-      + apply IHe; trivial.
-    - apply Val_Lib.
-  Qed.
+Lemma type_checks_lib_ct : forall (ct : class_table) (gamma : context) (e : expr),
+    valid_table ct -> type_checks (ct_lib ct) gamma e -> type_checks ct gamma e.
+Proof.
+  intros ct gamma e pft typ_lib. 
+  induction e using expr_ind_list; inversion typ_lib; econstructor; eauto; subst.
+Qed.
+Hint Resolve type_checks_lib_ct.
 
-  Lemma valid_class_irrelevance :
-    forall ct c (pfc : valid_class ct c) (pfc' : valid_class ct c),
-      pfc = pfc'.
-  Proof.
-    intros. generalize dependent pfc'. induction pfc.
-    - intros. assert (exists i' n', pfc' = ValidObj ct i' n') by (apply valid_obj_Valid_Obj; trivial).
-      destruct H as [i' [n' Heqpfc']]. subst.
-      replace i' with i by apply proof_irrelevance. replace n' with n by apply proof_irrelevance.
-      reflexivity.
-    - intros. destruct pfc' eqn:Heqpfc'; try inversion e.
-      assert (d = d0) by (apply extends_injective with ct c; eauto). subst d0.
-      replace e0 with e by apply proof_irrelevance.
-      replace n0 with n by apply proof_irrelevance.
-      replace o0 with o by apply proof_irrelevance.
-      replace v with pfc by apply IHpfc. reflexivity.
-  Qed.
+Lemma valid_expr_lib_ct : forall (ct : class_table) (gamma : context) (e : expr),
+    valid_table ct -> valid_expr (ct_lib ct) gamma e -> valid_expr ct gamma e.
+Proof.
+  intros ct gamma e pft val_lib.
+  inversion pft.
+  induction e using expr_ind_list; inversion val_lib; econstructor; eauto. Unshelve.
+  - erewrite <- decl_in_lib_decl_in_ct; eauto.
+  - erewrite <- mresolve_lib_ct; eauto.
+  - eauto.
+  - eauto.
+Qed.
+Hint Resolve valid_expr_lib_ct.
 
-  Lemma type_of_fn : forall ct gamma e ci di,
+Lemma valid_class_irrelevance :
+  forall ct c (pfc : valid_class ct c) (pfc' : valid_class ct c),
+    pfc = pfc'.
+Proof.
+  intros. generalize dependent pfc'. induction pfc.
+  - intros. assert (exists i' n', pfc' = ValidObj ct i' n') by (apply valid_obj_Valid_Obj; trivial).
+    destruct H as [i' [n' Heqpfc']]. subst.
+    replace i' with i by apply proof_irrelevance. replace n' with n by apply proof_irrelevance.
+    reflexivity.
+  - intros. destruct pfc' eqn:Heqpfc'; try inversion e.
+    assert (d = d0) by (apply extends_injective with ct c; eauto). subst d0.
+    replace e0 with e by apply proof_irrelevance.
+    replace n0 with n by apply proof_irrelevance.
+    replace o0 with o by apply proof_irrelevance.
+    replace v with pfc by apply IHpfc. reflexivity.
+Qed.
+Hint Resolve valid_class_irrelevance.
+
+Ltac subst_some :=
+  repeat match goal with
+         | [ G : ?x = Some ?y,
+                 H : ?x = Some ?z |- _ ] => rewrite G in H; inversion H; subst
+         end.
+
+Lemma type_of_fn : forall ct gamma e ci di,
     valid_table ct -> type_of ct gamma e ci -> type_of ct gamma e di -> ci = di.
-  Proof.
-    intros ct gamma e ci di pft tci. generalize dependent di.
-    induction tci; intros di0 tdi0; inversion tdi0; trivial.
-    - subst e0. subst f0. subst di1. assert (id_of c = id_of c0). apply IHtci; trivial.
-      assert (c = c0) by (apply id_eq with ct; trivial). subst.
-      assert (pfc0 = pfc) by apply valid_class_irrelevance. subst pfc0.
-      rewrite H in H4. inversion H4. reflexivity.
-    - apply IHtci; trivial.
-  Qed.
+Proof with subst; eauto.
+  intros ct gamma e ci di pft tci. generalize dependent di.
+  induction tci; intros di0 tdi0; inversion tdi0; subst_some; subst; eauto.
+  assert (c = c0)... assert (pfc = pfc0)... subst_some. reflexivity.
+Qed.
+Hint Resolve type_of_fn.
 
-  Lemma typ_check_in_lib_typ_in_lib : forall ct gamma e ci,
-      valid_table ct -> type_checks (ct_lib ct) gamma e -> type_of ct gamma e ci -> in_lib_id ct ci.
-  Proof.
-    intros ct gamma e c pft typ_chk typ.
-    destruct e; inversion typ; inversion typ_chk; subst; try (apply in_ct_lib_in_lib_id; trivial).
-    - assert (c = di0).
-      { apply type_of_fn with ct gamma (E_Field e f); eauto. apply typ_in_lib_typ_in_ct; eauto. }
-      subst di0; trivial.
-    - replace (id_of c0) with di; trivial.
-      apply type_of_fn with ct gamma (E_Invk e m l); trivial.
-      apply typ_in_lib_typ_in_ct; trivial.
-  Qed.
+Lemma typ_check_in_lib_typ_in_lib : forall ct gamma e ci,
+    valid_table ct -> type_checks (ct_lib ct) gamma e -> type_of ct gamma e ci -> in_lib_id ct ci.
+Proof with subst; eauto.
+  intros ct gamma e c pft typ_chk typ.
+  destruct e; inversion typ; inversion typ_chk; subst_some; subst; eauto.
+  - assert (c = di0)...
+  - assert (id_of c0 = di)...
+Qed.
+Hint Resolve typ_check_in_lib_typ_in_lib.
 
-  Lemma in_lib_id_in_lib : forall {ct} (pft : valid_table ct) c,
-      in_table ct c -> in_lib_id ct (id_of c) -> in_lib ct c.
-  Proof.
-    intros [app lib] pft c H H0. inversion pft. simpl in H0. destruct H0 as [c0 Hc0]. subst.
-    simpl. apply H2 in H as lookc. simpl in lookc. destruct (app (id_of c)) eqn:appid.
-    - specialize (H4 (id_of c)). destruct H4. split; simpl; eauto.
-    - apply lookc.
-  Qed.
+Lemma in_lib_id_in_lib : forall {ct} (pft : valid_table ct) c,
+    in_table ct c -> in_lib_id ct (id_of c) -> in_lib ct c.
+Proof.
+  intros [app lib] pft c H H0. inversion pft. simpl in H0. destruct H0 as [c0 Hc0]. subst.
+  simpl. apply H2 in H as lookc. simpl in lookc. destruct (app (id_of c)) eqn:appid.
+  - specialize (H4 (id_of c)). destruct H4. split; simpl; eauto.
+  - apply lookc.
+Qed.
+Hint Resolve in_lib_id_in_lib.
 
-  Lemma decl_of_lib_in_lib : forall ct c pfc d fi,
+Lemma decl_of_lib_in_lib : forall ct c pfc d fi,
     valid_table ct -> in_lib ct c -> declaring_class ct c pfc fi = Some d -> in_lib_id ct d.
-  Proof.
-    intros ct c pfc d fi pft c_in_lib decl.
-    induction pfc.
-    - inversion decl.
-    - simpl in decl.
-      destruct (@existsb field_id (beq_nat fi) (dfields c)).
-      + inversion decl. subst. destruct ct as [app lib]. simpl. exists c. apply c_in_lib.
-      + destruct o as [[par_app ch_app] | [ch_tab par_lib]].
-        * apply IHpfc; trivial.
-        * destruct n. split; trivial.
-  Qed.
+Proof.
+  intros ct c pfc d fi pft c_in_lib decl.
+  induction pfc.
+  - inversion decl.
+  - simpl in decl.
+    destruct (@existsb field_id (beq_nat fi) (dfields c)).
+    + inversion decl. subst. destruct ct as [app lib]. simpl. exists c. apply c_in_lib.
+    + destruct o as [[par_app ch_app] | [ch_tab par_lib]].
+      * apply IHpfc; trivial.
+      * destruct n. split; trivial.
+Qed.
+Hint Resolve decl_of_lib_in_lib.
 
-  Lemma do_valid_sub_keep_type : forall ct gamma sig e ci,
-      valid_table ct -> valid_sub ct gamma sig -> (type_of ct gamma e ci <-> type_of ct gamma (do_sub sig e) ci).
-  Proof.
-    intros ct gamma sig e ci pft H.
-    generalize dependent ci. induction e using expr_ind_list; intros; simpl.
-    - destruct (find (fun p : var * expr => beq_var (fst p) v) sig)eqn:findp.
-      + destruct p. apply find_some in findp. unfold valid_sub in H.
-        destruct findp. simpl in H1. symmetry in H1. rewrite <- beq_var_true in H1. subst v0.
-        assert (type_of ct gamma (snd (v, e)) (gamma (fst (v, e)))).
-        { apply Forall_In with (l := sig) (a := (v, e)); eauto. }
-        simpl in H1. split; intro.
-        * inversion H2. trivial.
-        * replace ci with (gamma v). apply T_Var.
-          apply type_of_fn with ct gamma e; eauto.
-      + reflexivity.
-    - split; intros; inversion H0; apply T_Field with c pfc; trivial; apply IHe; trivial.
-    - split; intros; inversion H1; subst; apply T_New with c0 pfc lc (fields ct c0 pfc);
-               try rewrite map_length; trivial; try rewrite <- (map_length (do_sub sig)); trivial;
-                 clear H6 H1 H10; generalize dependent lc; induction l; intros; try (apply Forall_nil);
-                   destruct lc; inversion H7; inversion H0; inversion H8; apply Forall_cons; eauto;
-                     solve [rewrite H4; apply H10 | rewrite <- H4; apply H10].
-    - split; intros; inversion H1; subst; apply T_Invk with c0 pfc0 ld ret lc; eauto;
-               try solve [apply IHe; trivial]; try rewrite map_length; trivial;
-                 try rewrite <- (map_length (do_sub sig)); trivial;
-                   clear H8 H12 H1; generalize dependent lc; induction l; intros; try (apply Forall_nil);
-                     destruct lc; inversion H9; inversion H0; inversion H11; apply Forall_cons; eauto;
-                       solve [rewrite <- H4; apply H12 | rewrite H4; apply H12].
-    - split; intros; inversion H0; apply T_Cast with di; trivial; apply IHe; trivial.
-    - reflexivity.
-  Qed.
+Lemma do_valid_sub_keep_type : forall ct gamma sig e ci,
+    valid_table ct -> valid_sub ct gamma sig -> (type_of ct gamma e ci <-> type_of ct gamma (do_sub sig e) ci).
+Proof with subst; eauto.
+  intros ct gamma sig e ci pft H.
+  generalize dependent ci. induction e using expr_ind_list; intros; simpl.
+  - destruct (find (fun p : var * expr => beq_var (fst p) v) sig)eqn:findp.
+    + destruct p. apply find_some in findp. unfold valid_sub in H.
+      destruct findp. simpl in H1. symmetry in H1. rewrite <- beq_var_true in H1. subst v0.
+      eapply Forall_In in H...
+      simpl in H.
+      destruct H as [ci' [lookup_ci' type_of_ci']].
+      split; intros G.
+      * inversion G. subst_some. assumption.
+      * econstructor. rewrite type_of_fn with ct gamma e ci ci'...
+    + reflexivity.
+  - split; intros; inversion H0; apply T_Field with c pfc; trivial; apply IHe; trivial.
+  - split; intros; inversion H1; subst; apply T_New with c0 pfc lc (fields ct c0 pfc);
+      try rewrite map_length; trivial; try rewrite <- (map_length (do_sub sig)); trivial;
+        clear H6 H1 H10; generalize dependent lc; induction l; intros; try (apply Forall_nil);
+          destruct lc; inversion H7; inversion H0; inversion H8; apply Forall_cons; eauto;
+            solve [rewrite H4; apply H10 | rewrite <- H4; apply H10].
+  - split; intros; inversion H1; subst; apply T_Invk with c0 pfc0 ld ret lc; eauto;
+      try solve [apply IHe; trivial]; try rewrite map_length; trivial;
+        try rewrite <- (map_length (do_sub sig)); trivial;
+          clear H8 H12 H1; generalize dependent lc; induction l; intros; try (apply Forall_nil);
+            destruct lc; inversion H9; inversion H0; inversion H11; apply Forall_cons; eauto;
+              solve [rewrite <- H4; apply H12 | rewrite H4; apply H12].
+  - split; intros; inversion H0; apply T_Cast with di; trivial; apply IHe; trivial.
+  - reflexivity.
+Qed.
+Hint Resolve do_valid_sub_keep_type.
 
-  Lemma mresolve_in_methods : forall ct c pfc d mi,
-      mresolve ct mi c pfc = Some d -> In mi (dmethods_id d).
-  Proof.
-    intros. induction pfc.
-    - inversion H.
-    - simpl in H.
-      destruct (existsb (beq_nat mi) (dmethods_id c)) eqn:exst; eauto.
-      inversion H. subst. rewrite existsb_exists in exst. destruct exst as [x [in_eqb]].
-      apply beq_nat_true in H0. rewrite H0. trivial.
-  Qed.
+Lemma mresolve_in_methods : forall ct c pfc d mi,
+    mresolve ct mi c pfc = Some d -> In mi (dmethods_id d).
+Proof.
+  intros. induction pfc.
+  - inversion H.
+  - simpl in H.
+    destruct (existsb (beq_nat mi) (dmethods_id c)) eqn:exst; eauto.
+    inversion H. subst. rewrite existsb_exists in exst. destruct exst as [x [in_eqb]].
+    apply beq_nat_true in H0. rewrite H0. trivial.
+Qed.
+Hint Resolve mresolve_in_methods.
 
-  Lemma valid_table_valid_lib : forall ct,
-      valid_table ct -> valid_table (ct_lib ct).
-  Proof.
-    intros ct pft. inversion pft. subst.
-    apply VT.
-    - intros.
-      assert (valid_class ct c) as pfc.
-      { apply H. apply in_lib_in_table. apply in_ct_lib_in_lib. trivial. }
-      destruct ct as [app lib]. induction pfc.
-      + apply ValidObj.
-        * simpl. simpl in i. trivial.
-        * simpl. unfold empty_map. unfold not. intros. inversion H6.
-      + apply ValidParent with d.
-        * apply IHpfc. unfold in_table. simpl. right. inversion pfc; trivial.
-          destruct o as [[don _] | [_ con]]; trivial.
-          destruct n. split; trivial. apply in_ct_lib_in_lib. trivial.
-        * destruct c; trivial.
-          simpl. simpl in e. destruct (app c0) eqn:appc0; trivial.
-          inversion e. subst c2. clear e. destruct o as [[d_in_lib c_in_table] | [d_in_app c_in_app]].
-          -- destruct (not_lib_app (app, lib) d pfc). split. apply d_in_lib.
-             assert (lookup (app, lib) c0 = app c0).
-             { simpl. rewrite appc0. reflexivity. }
-             rewrite appc0 in H6. apply H1 in H6. subst c0.
-             simpl. trivial.
-          -- simpl in H3. unfold in_table in H3. destruct H5.
-             ++ unfold empty_map in H3. inversion H5.
-             ++ destruct n. split; eauto.  
-        * simpl. unfold empty_map. unfold not. intros. destruct H6. inversion H7.
-        * left. split; trivial.
-          destruct o; destruct H6; eauto.
-          apply in_ct_lib_in_lib in H5. destruct n. split; trivial.
-    - destruct ct as [app lib]. intros. simpl.
-      assert (in_table (app, lib) c) as c_in_table. apply in_lib_in_table. apply in_ct_lib_in_lib; trivial.
-      apply H0 in c_in_table as lookc. simpl in lookc. destruct (app (id_of c)) eqn:appcid; trivial.
-      inversion lookc. subst c0. apply H in c_in_table as pfc.
-      destruct (not_lib_app (app, lib) c pfc).
-      split; trivial. apply in_ct_lib_in_lib; trivial.
-    - intros. destruct ct as [app lib].
-      simpl in H2. apply H1. simpl. destruct (app ci) eqn:appci; eauto.
-      remember appci as appci'. clear Heqappci'.
-      replace (app ci) with (lookup (app, lib) ci) in appci'; simpl; try rewrite appci; try reflexivity.
-      rename appci' into lookci. 
-      apply H1 in lookci; trivial. subst ci.
-      assert (valid_class (app, lib) c0) as pfc0. apply H. apply in_app_in_table. apply appci.
-      destruct (H2 (id_of c0)). split.
-      + exists c. apply H5.
-      + exists c0. apply appci.
-    - destruct ct as [app lib]. simpl. unfold not. intros ci [_ [c contra]]. inversion contra.
-    - intros c pfc_l c' pfc_l' fi di di' decl_c decl_c'.
-      assert (valid_class ct c) as pfc.
-      { apply H. apply in_lib_in_table. apply in_ct_lib_in_lib. apply valid_in_table. assumption. }
-      assert (valid_class ct c') as pfc'.
-      { apply H. apply in_lib_in_table. apply in_ct_lib_in_lib. apply valid_in_table. assumption. }
-      rewrite decl_in_lib_decl_in_ct with (pfc := pfc) in decl_c; try assumption.
-      rewrite decl_in_lib_decl_in_ct with (pfc := pfc') in decl_c'; try assumption.
-      apply H3 with c pfc c' pfc' fi; assumption.
-    - intros c pfc_l c' pfc_l' mi di di' decl_c decl_c'.
-      assert (valid_class ct c) as pfc.
-      { apply H. apply in_lib_in_table. apply in_ct_lib_in_lib. apply valid_in_table. assumption. }
-      assert (valid_class ct c') as pfc'.
-      { apply H. apply in_lib_in_table. apply in_ct_lib_in_lib. apply valid_in_table. assumption. }
-      rewrite mresolve_lib_ct with (pfc := pfc) in decl_c; try assumption.
-      rewrite mresolve_lib_ct with (pfc := pfc') in decl_c'; try assumption.
-      apply H4 with c pfc c' pfc' mi; assumption.
-  Qed.
+Lemma valid_table_valid_lib : forall ct,
+    valid_table ct -> valid_table (ct_lib ct).
+Proof.
+  intros ct pft. inversion pft. subst.
+  apply VT.
+  - intros.
+    assert (valid_class ct c) as pfc.
+    { apply H. apply in_lib_in_table. apply in_ct_lib_in_lib. trivial. }
+    destruct ct as [app lib]. induction pfc.
+    + apply ValidObj.
+      * simpl. simpl in i. trivial.
+      * simpl. unfold empty_map. unfold not. intros. inversion H6.
+    + apply ValidParent with d.
+      * apply IHpfc. unfold in_table. simpl. right. inversion pfc; trivial.
+        destruct o as [[don _] | [_ con]]; trivial.
+        destruct n. split; trivial. apply in_ct_lib_in_lib. trivial.
+      * destruct c; trivial.
+        simpl. simpl in e. destruct (app c0) eqn:appc0; trivial.
+        inversion e. subst c2. clear e. destruct o as [[d_in_lib c_in_table] | [d_in_app c_in_app]].
+        -- destruct (not_lib_app (app, lib) d pfc). split. apply d_in_lib.
+           assert (lookup_class (app, lib) c0 = app c0).
+           { simpl. rewrite appc0. reflexivity. }
+           rewrite appc0 in H6. apply H1 in H6. subst c0.
+           simpl. trivial.
+        -- simpl in H3. unfold in_table in H3. destruct H5.
+           ++ unfold empty_map in H3. inversion H5.
+           ++ destruct n. split; eauto.  
+      * simpl. unfold empty_map. unfold not. intros. destruct H6. inversion H7.
+      * left. split; trivial.
+        destruct o; destruct H6; eauto.
+        apply in_ct_lib_in_lib in H5. destruct n. split; trivial.
+  - destruct ct as [app lib]. intros. simpl.
+    assert (in_table (app, lib) c) as c_in_table. apply in_lib_in_table. apply in_ct_lib_in_lib; trivial.
+    apply H0 in c_in_table as lookc. simpl in lookc. destruct (app (id_of c)) eqn:appcid; trivial.
+    inversion lookc. subst c0. apply H in c_in_table as pfc.
+    destruct (not_lib_app (app, lib) c pfc).
+    split; trivial. apply in_ct_lib_in_lib; trivial.
+  - intros. destruct ct as [app lib].
+    simpl in H2. apply H1. simpl. destruct (app ci) eqn:appci; eauto.
+    remember appci as appci'. clear Heqappci'.
+    replace (app ci) with (lookup_class (app, lib) ci) in appci'; simpl; try rewrite appci; try reflexivity.
+    rename appci' into lookci. 
+    apply H1 in lookci; trivial. subst ci.
+    assert (valid_class (app, lib) c0) as pfc0. apply H. apply in_app_in_table. apply appci.
+    destruct (H2 (id_of c0)). split.
+    + exists c. apply H5.
+    + exists c0. apply appci.
+  - destruct ct as [app lib]. simpl. unfold not. intros ci [_ [c contra]]. inversion contra.
+  - intros c pfc_l c' pfc_l' fi di di' decl_c decl_c'.
+    assert (valid_class ct c) as pfc.
+    { apply H. apply in_lib_in_table. apply in_ct_lib_in_lib. apply valid_in_table. assumption. }
+    assert (valid_class ct c') as pfc'.
+    { apply H. apply in_lib_in_table. apply in_ct_lib_in_lib. apply valid_in_table. assumption. }
+    rewrite decl_in_lib_decl_in_ct with (pfc := pfc) in decl_c; try assumption.
+    rewrite decl_in_lib_decl_in_ct with (pfc := pfc') in decl_c'; try assumption.
+    apply H3 with c pfc c' pfc' fi; assumption.
+  - intros c pfc_l c' pfc_l' mi di di' decl_c decl_c'.
+    assert (valid_class ct c) as pfc.
+    { apply H. apply in_lib_in_table. apply in_ct_lib_in_lib. apply valid_in_table. assumption. }
+    assert (valid_class ct c') as pfc'.
+    { apply H. apply in_lib_in_table. apply in_ct_lib_in_lib. apply valid_in_table. assumption. }
+    rewrite mresolve_lib_ct with (pfc := pfc) in decl_c; try assumption.
+    rewrite mresolve_lib_ct with (pfc := pfc') in decl_c'; try assumption.
+    apply H4 with c pfc c' pfc' mi; assumption.
+Qed.
+Hint Resolve valid_table_valid_lib.
 
-  Lemma decl_index_of : forall ct c pfc fi d (pfd : valid_class ct d),
-      declaring_class ct c pfc fi = Some (id_of d) ->
-      exists n, index_of (beq_nat fi) (field_ids ct c pfc) = Some n.
-  Proof.
-    intros. induction pfc.
-    - inversion H.
-    - assert (decl_c := H). simpl in H. destruct (@existsb field_id (beq_nat fi) (dfields c)) eqn:exstb.
-      + apply existsb_exists in exstb. destruct exstb as [fi' [In_fi eqfi']].
-        apply beq_nat_true in eqfi'. subst fi'.
-        apply In_nth_error in In_fi. destruct In_fi as [m Hm].
-        simpl. destruct c; try solve [inversion e]. simpl in Hm.
-        generalize dependent m. clear e decl_c n o H.
-        induction l.
-        * intros. destruct m; inversion Hm.
-        * intros. simpl in Hm. simpl. destruct m.
-          -- simpl in Hm. inversion Hm. rewrite <- beq_nat_refl. exists 0. reflexivity.
-          -- simpl in Hm. destruct (IHl m Hm) as [n index_n].
-             destruct (beq_nat fi (snd a)); try (exists 0; reflexivity).
-             rewrite index_n. simpl. exists (S n). reflexivity.
-      + simpl. destruct c; inversion e. apply index_of_existsb. 
-        rewrite existsb_app. simpl in exstb. rewrite exstb. simpl.
-        apply index_of_existsb. apply IHpfc. simpl in decl_c. rewrite exstb in decl_c.
-        assumption.
-  Qed.
+Lemma decl_index_of : forall ct c pfc fi d (pfd : valid_class ct d),
+    declaring_class ct c pfc fi = Some (id_of d) ->
+    exists n, index_of (beq_nat fi) (field_ids ct c pfc) = Some n.
+Proof.
+  intros. induction pfc.
+  - inversion H.
+  - assert (decl_c := H). simpl in H. destruct (@existsb field_id (beq_nat fi) (dfields c)) eqn:exstb.
+    + apply existsb_exists in exstb. destruct exstb as [fi' [In_fi eqfi']].
+      apply beq_nat_true in eqfi'. subst fi'.
+      apply In_nth_error in In_fi. destruct In_fi as [m Hm].
+      simpl. destruct c; try solve [inversion e]. simpl in Hm.
+      generalize dependent m. clear e decl_c n o H.
+      induction l.
+      * intros. destruct m; inversion Hm.
+      * intros. simpl in Hm. simpl. destruct m.
+        -- simpl in Hm. inversion Hm. rewrite <- beq_nat_refl. exists 0. reflexivity.
+        -- simpl in Hm. destruct (IHl m Hm) as [n index_n].
+           destruct (beq_nat fi (snd a)); try (exists 0; reflexivity).
+           rewrite index_n. simpl. exists (S n). reflexivity.
+    + simpl. destruct c; inversion e. apply index_of_existsb. 
+      rewrite existsb_app. simpl in exstb. rewrite exstb. simpl.
+      apply index_of_existsb. apply IHpfc. simpl in decl_c. rewrite exstb in decl_c.
+      assumption.
+Qed.
+Hint Resolve decl_index_of.
 
-End lemmas.
+Lemma valid_expr_type_checks : forall ct gamma e,
+    valid_expr ct gamma e -> type_checks ct gamma e.
+Proof. intros. inversion H; subst; eauto. Qed.
+Hint Resolve valid_expr_type_checks.
 
-Section reduction_rules.
-  Inductive FJ_reduce (ct : class_table) : expr -> expr -> Prop :=
-  | R_Field : forall c pfc fi le ei n,
-      index_of (beq_nat fi) (field_ids ct c pfc) = Some n ->
-      nth_error le n = Some ei ->
-      FJ_reduce ct (E_Field (E_New (id_of c) le) fi) ei
-  | R_Invk : forall c (pfc : valid_class ct c) m mi le newle,
-      valid_method m -> find_method mi pfc = Some m ->
-      FJ_reduce ct (E_Invk (E_New (id_of c) newle) mi le)
-                   (do_sub ((This, (E_New (id_of c) newle)) :: (combine (args m) le)) (body m))
-  | R_Cast : forall c d le,
-      subtype ct c d -> FJ_reduce ct (E_Cast (id_of d) (E_New (id_of c) le)) (E_New (id_of c) le)
-  | RC_Field : forall e e' f,
-      FJ_reduce ct e e' -> FJ_reduce ct (E_Field e f) (E_Field e' f)
-  | RC_Invk_Recv : forall e e' m le,
-      FJ_reduce ct e e' -> FJ_reduce ct (E_Invk e m le) (E_Invk e' m le)
-  | RC_Invk_Arg : forall e m le le' e0 e0' n,
-      nth_error le n = Some e0 -> nth_error le' n = Some e0' ->
-      FJ_reduce ct e0 e0' -> FJ_reduce ct (E_Invk e m le) (E_Invk e m le')
-  | RC_New_Arg : forall c le le' e0 e0' n,
-      nth_error le n = Some e0 -> nth_error le' n = Some e0' ->
-      FJ_reduce ct e0 e0' -> FJ_reduce ct (E_New c le) (E_New c le')
-  | RC_Cast : forall c e e',
-      FJ_reduce ct e e' -> FJ_reduce ct (E_Cast c e) (E_Cast c e').
+Inductive FJ_reduce (ct : class_table) : expr -> expr -> Prop :=
+| R_Field : forall c pfc fi le ei n,
+    index_of (beq_nat fi) (field_ids ct c pfc) = Some n ->
+    nth_error le n = Some ei ->
+    FJ_reduce ct (E_Field (E_New (id_of c) le) fi) ei
+| R_Invk : forall c (pfc : valid_class ct c) m mi le newle,
+    find_method mi pfc = Some m ->
+    FJ_reduce ct (E_Invk (E_New (id_of c) newle) mi le)
+              (do_sub ((This, (E_New (id_of c) newle)) :: (combine (args m) le)) (body m))
+| R_Cast : forall c d le,
+    subtype ct c d -> FJ_reduce ct (E_Cast (id_of d) (E_New (id_of c) le)) (E_New (id_of c) le)
+| RC_Field : forall e e' f,
+    FJ_reduce ct e e' -> FJ_reduce ct (E_Field e f) (E_Field e' f)
+| RC_Invk_Recv : forall e e' m le,
+    FJ_reduce ct e e' -> FJ_reduce ct (E_Invk e m le) (E_Invk e' m le)
+| RC_Invk_Arg : forall e m le le' e0 e0' n,
+    nth_error le n = Some e0 -> nth_error le' n = Some e0' ->
+    FJ_reduce ct e0 e0' -> FJ_reduce ct (E_Invk e m le) (E_Invk e m le')
+| RC_New_Arg : forall c le le' e0 e0' n,
+    nth_error le n = Some e0 -> nth_error le' n = Some e0' ->
+    FJ_reduce ct e0 e0' -> FJ_reduce ct (E_New c le) (E_New c le')
+| RC_Cast : forall c e e',
+    FJ_reduce ct e e' -> FJ_reduce ct (E_Cast c e) (E_Cast c e').
+Hint Constructors FJ_reduce.
 
-  Variable f : nat -> set nat.
-  Variable a : set nat.
-  Check (a U a).
-  Inductive FJ_reduce' (ct : class_table) : expr -> expr -> Prop :=
-  | R'_refl : forall e, FJ_reduce' ct e e
-  | R'_step : forall e e' e'',
-      FJ_reduce ct e e' ->
-      FJ_reduce' ct e' e'' ->
-      FJ_reduce' ct e e''.
+Inductive FJ_reduce' (ct : class_table) : expr -> expr -> Prop :=
+| R'_refl : forall e, FJ_reduce' ct e e
+| R'_step : forall e e' e'',
+    FJ_reduce ct e e' ->
+    FJ_reduce' ct e' e'' ->
+    FJ_reduce' ct e e''.
+Hint Constructors FJ_reduce'.
 
-  Inductive AVE_reduce (ct : class_table) : expr -> set expr -> expr -> set expr -> Prop :=
-  | RA_FJ : forall e e' lpt,
-      FJ_reduce ct e e' -> AVE_reduce ct e lpt e' lpt
-  | RA_Field : forall f c pfc di e lpt,
-      declaring_class ct c pfc f = Some di -> in_lib_id ct di ->
-      AVE_reduce ct e lpt e (add (E_Field E_Lib f) lpt)
-  | RA_New : forall c pfc e lpt,
-      in_lib ct c ->
-      AVE_reduce ct e lpt e (add (E_New (id_of c) (repeat E_Lib (length (fields ct c pfc)))) lpt)
-  | RA_Invk : forall m c e lpt,
-      In m (dmethods c) -> in_lib ct c ->
-      AVE_reduce ct e lpt e (add (E_Invk E_Lib (mid m) (repeat E_Lib (length (args m)))) lpt)
-  | RA_Cast : forall c lpt, AVE_reduce ct (E_Cast c E_Lib) lpt E_Lib lpt
-  | RA_Lib_Invk : forall mi c pfc newle largs d lpt,
-      mresolve ct mi c pfc = Some d -> in_lib ct d ->
-      AVE_reduce ct
-                 (E_Invk (E_New (id_of c) newle) mi largs)
-                 lpt
-                 E_Lib
-                 (add (E_New (id_of c) newle) (set_from_list largs U lpt))
-  | RA_Return : forall e lpt,
-      set_In e lpt -> AVE_reduce ct E_Lib lpt e lpt
-  | RA_Sub : forall e e' lpt lpt' d,
-      set_In e lpt -> AVE_reduce ct e lpt e' lpt' ->
-      AVE_reduce ct d lpt d (add e' (lpt' U lpt))
-  | RAC_Field : forall e e' lpt lpt' f,
-      AVE_reduce ct e lpt e' lpt' ->
-      AVE_reduce ct (E_Field e f) lpt (E_Field e' f) (lpt' U lpt)
-  | RAC_Invk_Recv : forall e e' m le lpt lpt',
-      AVE_reduce ct e lpt e' lpt' ->
-      AVE_reduce ct (E_Invk e m le) lpt (E_Invk e' m le) (lpt' U lpt)
-  | RAC_Invk_Arg : forall e m le le' e0 e0' n lpt lpt',
-      nth_error le n = Some e0 -> nth_error le' n = Some e0' ->
-      AVE_reduce ct e0 lpt e0' lpt' ->
-      AVE_reduce ct (E_Invk e m le) lpt (E_Invk e m le') (lpt' U lpt)
-  | RAC_New_Arg : forall c le le' e0 e0' n lpt lpt',
-      nth_error le n = Some e0 -> nth_error le' n = Some e0' ->
-      AVE_reduce ct e0 lpt e0' lpt' ->
-      AVE_reduce ct (E_New c le) lpt (E_New c le') (lpt' U lpt)
-  | RAC_Cast : forall c e e' lpt lpt',
-      AVE_reduce ct e lpt e' lpt' ->
-      AVE_reduce ct (E_Cast c e) lpt (E_Cast c e') (lpt' U lpt).
+Inductive AVE_reduce (ct : class_table) : expr -> set expr -> expr -> set expr -> Prop :=
+| RA_FJ : forall e e' lpt,
+    FJ_reduce ct e e' -> AVE_reduce ct e lpt e' lpt
+| RA_Field : forall f c pfc di e lpt,
+    declaring_class ct c pfc f = Some di -> in_lib_id ct di ->
+    AVE_reduce ct e lpt e (add (E_Field E_Lib f) lpt)
+| RA_New : forall c pfc e lpt,
+    in_lib ct c ->
+    AVE_reduce ct e lpt e (add (E_New (id_of c) (repeat E_Lib (length (fields ct c pfc)))) lpt)
+| RA_Invk : forall m c e lpt,
+    In m (dmethods c) -> in_lib ct c ->
+    AVE_reduce ct e lpt e (add (E_Invk E_Lib (mid m) (repeat E_Lib (length (args m)))) lpt)
+| RA_Cast : forall c lpt, AVE_reduce ct (E_Cast c E_Lib) lpt E_Lib lpt
+| RA_Lib_Invk : forall mi c pfc newle largs d lpt,
+    mresolve ct mi c pfc = Some d -> in_lib ct d ->
+    AVE_reduce ct
+               (E_Invk (E_New (id_of c) newle) mi largs)
+               lpt
+               E_Lib
+               (add (E_New (id_of c) newle) (set_from_list largs U lpt))
+| RA_Return : forall e lpt,
+    set_In e lpt -> AVE_reduce ct E_Lib lpt e lpt
+| RA_Sub : forall e e' lpt lpt' d,
+    set_In e lpt -> AVE_reduce ct e lpt e' lpt' ->
+    AVE_reduce ct d lpt d (add e' (lpt' U lpt))
+| RAC_Field : forall e e' lpt lpt' f,
+    AVE_reduce ct e lpt e' lpt' ->
+    AVE_reduce ct (E_Field e f) lpt (E_Field e' f) (lpt' U lpt)
+| RAC_Invk_Recv : forall e e' m le lpt lpt',
+    AVE_reduce ct e lpt e' lpt' ->
+    AVE_reduce ct (E_Invk e m le) lpt (E_Invk e' m le) (lpt' U lpt)
+| RAC_Invk_Arg : forall e m le le' e0 e0' n lpt lpt',
+    nth_error le n = Some e0 -> nth_error le' n = Some e0' ->
+    AVE_reduce ct e0 lpt e0' lpt' ->
+    AVE_reduce ct (E_Invk e m le) lpt (E_Invk e m le') (lpt' U lpt)
+| RAC_New_Arg : forall c le le' e0 e0' n lpt lpt',
+    nth_error le n = Some e0 -> nth_error le' n = Some e0' ->
+    AVE_reduce ct e0 lpt e0' lpt' ->
+    AVE_reduce ct (E_New c le) lpt (E_New c le') (lpt' U lpt)
+| RAC_Cast : forall c e e' lpt lpt',
+    AVE_reduce ct e lpt e' lpt' ->
+    AVE_reduce ct (E_Cast c e) lpt (E_Cast c e') (lpt' U lpt).
+Hint Constructors AVE_reduce.
 
-  Inductive AVE_reduce' (ct : class_table) : expr -> set expr -> expr -> set expr -> Prop :=
-  | RA'_refl : forall e lpt, AVE_reduce' ct e lpt e lpt
-  | RA'_step : forall e lpt e' lpt' e'' lpt'',
-      AVE_reduce ct e lpt e' lpt' ->
-      AVE_reduce' ct e' lpt' e'' lpt'' ->
-      AVE_reduce' ct e lpt e'' lpt''.
-
-End reduction_rules.
-
+Inductive AVE_reduce' (ct : class_table) : expr -> set expr -> expr -> set expr -> Prop :=
+| RA'_refl : forall e lpt, AVE_reduce' ct e lpt e lpt
+| RA'_step : forall e lpt e' lpt' e'' lpt'',
+    AVE_reduce ct e lpt e' lpt' ->
+    AVE_reduce' ct e' lpt' e'' lpt'' ->
+    AVE_reduce' ct e lpt e'' lpt''.
+Hint Constructors AVE_reduce'.
 
 Lemma lemma1 : forall (ct : class_table) (c e : class) (mi : method_id) (pfc : valid_class ct c),
     mresolve ct mi c pfc = Some e -> in_app ct e -> in_app ct c.
@@ -1253,6 +1357,7 @@ Proof.
         -- destruct H2. split. apply H. apply c_res_e.
       * destruct H. apply H0.
 Qed.
+Hint Resolve lemma1.
 
 Lemma lemma2 : forall ct ct' (pft : ave_rel ct ct') c pfc pfc' e e' mi,
       in_app ct c -> mresolve ct mi c pfc = Some e -> mresolve ct' mi c pfc' = Some e' ->
@@ -1277,6 +1382,7 @@ Proof.
       (* d in app - use induction hypothesis *)
       * apply IHd with mi; trivial. 
 Qed.
+Hint Resolve lemma2.
 
 Lemma lemma3 : forall ct ct' lv le le' gamma e0 lpt,
     ave_rel ct ct' ->
@@ -1334,6 +1440,7 @@ Proof.
     apply IHe0; eauto. intros. apply valid_body. apply EIn_Cast; eauto.
   - inversion fj_expr.
 Qed.
+Hint Resolve lemma3.
 
 Lemma lemma4 : forall ct ct' lv le gamma e0 lpt,
     ave_rel ct ct' ->
@@ -1360,12 +1467,6 @@ Proof.
     + apply IHe0; eauto.
       intros. apply valid_body. apply EIn_Field. eauto.
     + rewrite <- decl_in_lib_decl_in_ct with (pfc_l := pfc_l); trivial.
-    + assert (in_lib ct c).
-      { inversion H1. apply in_lib_id_in_lib; try (apply valid_in_table; trivial). apply pft.
-        apply typ_check_in_lib_typ_in_lib with gamma e0; trivial. apply typ_in_lib_typ_in_ct; trivial.
-        subst. trivial. } 
-      apply decl_of_lib_in_lib with c pfc f0; trivial.
-      rewrite <- decl_in_lib_decl_in_ct with (pfc_l := pfc_l); trivial.
     + apply do_valid_sub_keep_type; trivial. subst ci. apply typ_in_lib_typ_in_ct; eauto.
   - simpl. inversion val_in_lib. inversion val_in_ct. inversion fj_expr. 
     apply Rel_Lib_New; eauto.
@@ -1376,15 +1477,6 @@ Proof.
       repeat (solve [rewrite Forall_map_swap; assumption] || eapply Forall_list_impl in H; try eassumption).
   - simpl. inversion val_in_lib. inversion val_in_ct. inversion fj_expr. 
     apply Rel_Lib_Invk; eauto.
-    + destruct H8 as [d mres_d]. exists d. subst.
-      assert (in_lib ct c).
-      { apply in_ct_lib_in_lib. apply valid_in_table. trivial. }
-      split.
-      * inversion pft. assert (valid_class ct c) as pfc'.
-        { apply val_in_lib_val_in_ct; eauto. } clear H1 H2 H7 H8 H9.
-        apply (mres_lib_in_lib ct m c d pfc'); trivial.
-        rewrite <- mresolve_lib_ct with (pfc_l := pfc); eauto.
-      * apply mresolve_in_methods with (ct_lib ct) c pfc; trivial.
     + apply IHe0; eauto. intros. apply valid_body. apply EIn_Invk. eauto.
     + assert (Forall (fun e0 => (forall v : var, expr_In v e0 -> In v lv)) l).
       { apply Forall_forall. intros. apply valid_body.
@@ -1396,6 +1488,7 @@ Proof.
   - inversion fj_expr.
   - inversion rel; trivial.
 Qed.
+Hint Resolve lemma4.
 
 Lemma lemma5 : forall ct ct' gamma e e' lpt lpt',
     alpha ct ct' gamma e e' lpt -> alpha ct ct' gamma e e' (lpt U lpt').
@@ -1404,6 +1497,7 @@ Proof.
   induction rel using alpha_ind_list; eauto; econstructor; try eassumption. 
   apply union_introl; trivial.
 Qed.
+Hint Resolve lemma5.
 
 Lemma lemma7addextra : forall A (ns lpt' lpt : set A),
     ns U lpt' U lpt = (ns U lpt') U ns U lpt.
@@ -1414,6 +1508,7 @@ Proof.
   rewrite <- union_assoc. rewrite (union_comm ns lpt').
   rewrite union_assoc. reflexivity.
 Qed.
+Hint Resolve lemma7addextra.
 
 Lemma lemma7 : forall ct' e e' lpt lpt' ns,
     AVE_reduce ct' e lpt e' lpt' -> AVE_reduce ct' e (union ns lpt) e' (union ns lpt').
@@ -1426,6 +1521,7 @@ Proof.
     econstructor; eassumption.
   - apply union_intror. apply H.
 Qed.
+Hint Resolve lemma7.
 
 Lemma lemma8 : forall ct' e e' lpt lpt',
     AVE_reduce ct' e lpt e' lpt' -> subset lpt lpt'.
@@ -1440,6 +1536,7 @@ Proof.
                                       | reflexivity || trivial]
           | reflexivity || trivial].
 Qed.
+Hint Resolve lemma8.
 
 
 Lemma lemma9setfromlist : forall {A : Type} (l : list A) (n : nat) (a : A),
@@ -1453,6 +1550,7 @@ Proof.
     unfold add. unfold E.Add. rewrite union_assoc. rewrite (union_comm (E.Singleton A a0) (E.Singleton A a)).
     rewrite <- union_assoc. reflexivity.
 Qed.
+Hint Resolve lemma9setfromlist.
 
 Lemma lemma9 : forall ct' n le e0 llpt lpt0,
     length le = S n -> length llpt = S n ->
@@ -1526,11 +1624,13 @@ Proof.
       * rewrite len_le. apply Lt.lt_n_S. apply Lt.lt_n_S. inversion le_m_n. contradiction. apply H2.
       * rewrite len_le. apply Lt.lt_n_S. apply le_m_n.
 Qed.
+Hint Resolve lemma9.
 
 Lemma E_Lib_dec : forall e, e = E_Lib \/ e <> E_Lib.
 Proof.
   intros. destruct e; solve [left; trivial | right; discriminate].
 Qed.
+Hint Resolve E_Lib_dec.
 
 Lemma use_lemma_9_1 : forall ct' e lpt e' lpt',
     AVE_reduce' ct' e lpt e' lpt' -> exists le llpt n,
@@ -1560,6 +1660,7 @@ Proof.
       * apply AVE_each with m; try assumption.
         apply Lt.lt_S_n. apply H1.
 Qed.
+Hint Resolve use_lemma_9_1.
 
 Lemma unuse_lemma_9_1 : forall n ct' e lpt e' lpt' le llpt,
     length le = S n -> length llpt = S n ->
@@ -1588,6 +1689,7 @@ Proof.
       intros. apply AVE_each with (S m); try assumption.
       apply Lt.lt_n_S. assumption.
 Qed.
+Hint Resolve unuse_lemma_9_1.
 
 Lemma lemma10 : forall ct ct' gamma e0 e0' e' lpt lpt',
     alpha ct ct' gamma e0 E_Lib lpt -> alpha ct ct' gamma e0' e' lpt' ->
@@ -1635,12 +1737,7 @@ Proof.
               symmetry. rewrite union_comm. apply union_include.
               unfold subset. unfold E.Included. intros. simpl in H8. destruct H8; inversion H8.
               subst x. apply H6.
-            + apply last_repeat.
-            + remember (n, lpt') as p.
-              replace n with (fst p) by (rewrite Heqp; reflexivity).
-              replace lpt' with (snd p) by (rewrite Heqp; reflexivity).
-              apply last_error_map with (a := p).
-              rewrite Heqp. apply last_error_zip_with_ind; trivial.
+            + rewrite last_error_map with (a := (n, lpt')); eauto. 
             + intros. destruct n. inversion H8.
               assert (exists lpt_m, nth_error llpt m = Some lpt_m).
               { apply nth_error_better_Some. rewrite len_llpt. apply le_S. apply H8. }
@@ -1673,6 +1770,7 @@ Proof.
         rewrite union_comm. apply lemma5. trivial.
       * symmetry in H10. contradiction.
 Qed.
+Hint Resolve lemma10.
 
 Lemma fields_same : forall {ct ct' c} (pfc : valid_class ct c) (pfc' : valid_class ct' c),
     ave_rel ct ct' -> fields ct c pfc = fields ct' c pfc'.
@@ -1680,6 +1778,7 @@ Proof.
   intros. apply simul_induct with (ct := ct) (ct' := ct') (c := c) (pfc := pfc) (pfc' := pfc'); trivial.
   - clear c pfc pfc'. intros. simpl. rewrite H0. reflexivity.
 Qed.
+Hint Resolve fields_same.
 
 Lemma field_ids_same : forall {ct ct' c} (pfc : valid_class ct c) (pfc' : valid_class ct' c),
     ave_rel ct ct' -> field_ids ct c pfc = field_ids ct' c pfc'.
@@ -1687,6 +1786,7 @@ Proof.
   intros. apply simul_induct with (ct := ct) (ct' := ct') (c := c) (pfc := pfc) (pfc' := pfc'); trivial.
   - clear c pfc pfc'. intros. simpl. rewrite H0. reflexivity.
 Qed.
+Hint Resolve field_ids_same.
 
 Inductive sub_expr : expr -> expr -> Prop :=
 | SUB_Refl : forall e, sub_expr e e
@@ -1696,6 +1796,7 @@ Inductive sub_expr : expr -> expr -> Prop :=
 | SUB_Invk_Recv : forall e mi le, sub_expr e (E_Invk e mi le)
 | SUB_Invk_Arg : forall e mi le e', In e' le -> sub_expr e' (E_Invk e mi le)
 | SUB_Cast : forall e ci, sub_expr e (E_Cast ci e).
+Hint Constructors sub_expr.
 
 Lemma calPsub : forall ct' gamma e lpt e',
     calP ct' gamma e lpt -> sub_expr e' e -> calP ct' gamma e' lpt.
@@ -1703,6 +1804,7 @@ Proof.
   intros. induction H0; eauto; unfold calP in H; destruct H as [typ_chk lpt_good];
             inversion typ_chk; unfold calP; split; trivial; apply Forall_In with le; trivial.
 Qed.
+Hint Resolve calPsub.
 
 Lemma keep_id_keep_class : forall ct ct' c (pfc : valid_class ct c),
     ave_rel ct ct' -> in_lib ct c -> in_table_id ct' (id_of c) -> in_lib ct' c.
@@ -1736,6 +1838,7 @@ Proof.
     { apply id_eq with ct; assumption. }
     subst c0. assumption.
 Qed.
+Hint Resolve keep_id_keep_class.
 
 Lemma In_fields_decl_exists : forall {ct c} (pfc : valid_class ct c) fi,
     In fi (field_ids ct c pfc) <-> (exists ci, declaring_class ct c pfc fi = Some ci).
@@ -1758,6 +1861,7 @@ Proof.
       * destruct c; inversion e. simpl in exstb. simpl. apply in_or_app. right. apply IHpfc.
         exists ci. assumption.
 Qed.
+Hint Resolve In_fields_decl_exists.
 
 Lemma decl_of_in_lib_in_lib : forall {ct c} (pfc : valid_class ct c) fi di,
     declaring_class ct c pfc fi = Some di -> in_lib ct c -> in_lib_id ct di.
@@ -1770,6 +1874,7 @@ Proof.
       destruct o as [[in_lib _] | [_ contra]]; try assumption.
       destruct n. split; assumption.
 Qed.
+Hint Resolve decl_of_in_lib_in_lib.
 
 Lemma decl_ct'_decl_ct : forall ct ct' (pft : ave_rel ct ct') c pfc pfc' fi,
     declaring_class ct' c pfc' fi = declaring_class ct c pfc fi.
@@ -1781,10 +1886,12 @@ Proof.
     simpl. destruct (@existsb field_id (beq_nat fi) (dfields c)) eqn:exstb; try reflexivity.
     apply IHc. 
 Qed.
+Hint Resolve decl_ct'_decl_ct.
 
 Lemma valid_ct_not_lib_app_id : forall {ct},
     valid_table ct -> (forall ci, ~ (in_lib_id ct ci /\ in_app_id ct ci)).
 Proof. intros. destruct H. apply H2. Qed.
+Hint Resolve valid_ct_not_lib_app_id.
 
 Lemma valid_ct'_valid_ct : forall ct ct' c (pfc' : valid_class ct' c),
     ave_rel ct ct' -> valid_class ct c.
@@ -1805,6 +1912,7 @@ Proof.
            ++ apply H3 in H4. apply in_lib_in_table. destruct H4. apply H4.
       * right. split; apply H1; assumption.
 Qed.
+Hint Resolve valid_ct'_valid_ct.
 
 Lemma decl_in_table : forall ct c pfc fi di,
     declaring_class ct c pfc fi = Some di -> in_table_id ct di.
@@ -1816,6 +1924,7 @@ Proof.
     destruct o as [[_ [in_app | in_lib]] | [_ in_app]];
       solve [left; exists c; assumption | right; exists c; assumption ].
 Qed.
+Hint Resolve decl_in_table.
 
 Lemma in_table_in_table' : forall ct ct' c,
     ave_rel ct ct' -> in_table ct c -> in_table_id ct' (id_of c) -> in_table ct' c.
@@ -1848,6 +1957,7 @@ Proof.
       apply id_eq with (ct := ct) in H13; subst; try assumption;
         apply in_table_valid; apply in_lib_in_table; assumption.
 Qed.
+Hint Resolve in_table_in_table'.
 
 Lemma decld_class_same_decl : forall ct c pfc fi e pfe,
     valid_table ct -> 
@@ -1862,6 +1972,7 @@ Proof.
     subst. subst. assumption.
   - apply IHpfd with pfd; try reflexivity. assumption.
 Qed.
+Hint Resolve decld_class_same_decl.
 
 Lemma fields_field_ids_length : forall ct c pfc,
     length (fields ct c pfc) = length (field_ids ct c pfc).
@@ -1870,3 +1981,4 @@ Proof.
   simpl. destruct c; try solve [inversion e].
   repeat (rewrite app_length; rewrite map_length). rewrite IHpfc. reflexivity.
 Qed.
+Hint Resolve fields_field_ids_length.
