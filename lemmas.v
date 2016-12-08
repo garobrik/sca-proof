@@ -3,15 +3,7 @@ Require Export Coq.Lists.List.
 Require Export Arith.EqNat.
 Require Export Program.Equality.
 Require Export Coq.Logic.ProofIrrelevance.
-
-Ltac inverts n :=
-  match n with
-  | S ?n' => match goal with
-            | [ H : _ |- _ ] => try (inversion H; subst; inverts n')
-            | _ => idtac
-            end
-  | _ => idtac
-  end.
+Require Export tactics.
 
 Module E.
   Require Coq.Sets.Ensembles.
@@ -542,4 +534,4 @@ Proof.
 Qed.
 Hint Resolve In_set_from_list_In_list.
 
-Hint Resolve nth_error_In.
+Hint Resolve nth_error_In. Hint Resolve in_map_iff.
