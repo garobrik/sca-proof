@@ -534,4 +534,77 @@ Proof.
 Qed.
 Hint Resolve In_set_from_list_In_list.
 
+Lemma find_app : forall {A} l1 l2 f (a : A),
+    find f (l1 ++ l2) = Some a -> find f l1 = Some a \/ find f l2 = Some a.
+Proof.
+  induction l1; intros; eauto.
+  simpl in *. destruct (f a); eauto.
+Qed.
+Hint Resolve find_app.
+
+Lemma not_find_app : forall {A} (f : A -> bool) l1 l2,
+    find f (l1 ++ l2) = None <-> find f l1 = None /\ find f l2 = None.
+Proof.
+  induction l1; intros; split; eauto.
+  simpl in *. destruct (f a); eauto; discriminate.
+Qed.
+Hint Resolve not_find_app.
+
+Lemma combine_map_l : forall {A B C} la (lb : list B) (f : A -> C),
+    combine (map f la) lb = map (fun p => (f (fst p), snd p)) (combine la lb).
+Proof.
+  induction la; destruct lb; try reflexivity.
+  simpl. intros. rewrite IHla. reflexivity.
+Qed.
+Hint Resolve combine_map_l.
+
+Lemma combine_map_r : forall {A B C} lb (la : list A) (f : B -> C),
+    combine la (map f lb) = map (fun p => (fst p, f (snd p))) (combine la lb).
+Proof.
+  induction lb; destruct la; try reflexivity.
+  simpl. intros. rewrite IHlb. reflexivity.
+Qed.
+Hint Resolve combine_map_r.
+
+Lemma Forall_add_combine : forall {A B} (P : A -> B -> Prop) la lb,
+    Forall (fun a => forall b, P a b) la -> Forall (fun p => P (fst p) (snd p)) (combine la lb).
+Proof. induction la; intros; simpl; destruct lb; trivial. inversion H. eauto. Qed.
+Hint Resolve Forall_add_combine.
+
+Lemma Forall_combine_same : forall {A} (P : A -> A -> Prop) l,
+    Forall (fun p => P (fst p) (snd p)) (combine l l) <-> Forall (fun a => P a a) l.
+Proof.
+  induction l; split; intros; auto;
+    inversion H; subst; simpl in *; constructor; auto;
+      apply IHl; auto.
+Qed.
+Hint Resolve Forall_combine_same.
+
+Lemma Forall_exists : forall {A B} (P : A -> B -> Prop) la lb,
+    length la <= length lb ->
+    Forall (fun p => P (fst p) (snd p)) (combine la lb) ->
+    Forall (fun a => exists b, P a b) la.
+Proof.
+  induction la; auto.
+  intros. destruct lb; try solve [inversion H].
+  inversion H0. subst. simpl in *.
+  constructor.
+  - eexists; eassumption.
+  - eapply IHla; eauto. apply le_S_n. assumption.
+Qed.
+Hint Resolve Forall_exists.
+
+Lemma find_map : forall {A B} (f : A -> B) (p : B -> bool) l,
+    find p (map f l) = option_map f (find (fun a => p (f a)) l).
+Proof.
+  induction l; auto.
+  simpl in *. destruct (p (f a)); auto.
+Qed.
+Hint Resolve find_map.
+
+Lemma option_map_None : forall {A B} (f : A -> B) oa,
+    option_map f oa = None <-> oa = None.
+Proof. split; intros; destruct oa; auto; discriminate. Qed.
+Hint Resolve option_map_None.
+
 Hint Resolve nth_error_In. Hint Resolve in_map_iff.
