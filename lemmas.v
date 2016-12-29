@@ -545,8 +545,8 @@ Hint Resolve find_app.
 Lemma not_find_app : forall {A} (f : A -> bool) l1 l2,
     find f (l1 ++ l2) = None <-> find f l1 = None /\ find f l2 = None.
 Proof.
-  induction l1; intros; split; eauto.
-  simpl in *. destruct (f a); eauto; discriminate.
+  induction l1; split; intros; decomp; auto; simpl in *;
+    destruct (f a); auto; try discriminate; apply IHl1; try split; auto.
 Qed.
 Hint Resolve not_find_app.
 
