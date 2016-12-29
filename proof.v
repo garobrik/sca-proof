@@ -1307,6 +1307,13 @@ Proof.
 Qed.
 Hint Resolve decl_index_of.
 
+Lemma decl_iff_lookup : forall ct c pfc fi,
+    (exists di, declaring_class ct c pfc fi = Some di) <-> (exists di, lookup_field pfc fi = Some di).
+Proof.
+  induction pfc; split; intros H; destruct H as [di Hdi]; try discriminate;
+    simpl in *; unfold lookup_field in *; destruct (@existsb field_id (beq_nat fi) (dfield_ids c)); auto.
+
+
 Inductive FJ_reduce (ct : class_table) : expr -> expr -> Prop :=
 | R_Field : forall c (pfc : valid_class ct c) fi le ei n,
     index_of (beq_nat fi) (field_ids pfc) = Some n ->
