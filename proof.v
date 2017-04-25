@@ -1311,8 +1311,8 @@ Lemma decl_iff_lookup : forall ct c pfc fi,
     (exists di, declaring_class ct c pfc fi = Some di) <-> (exists di, lookup_field pfc fi = Some di).
 Proof.
   induction pfc; split; intros H; destruct H as [di Hdi]; try discriminate;
-    simpl in *; unfold lookup_field in *; destruct (@existsb field_id (beq_nat fi) (dfield_ids c)); auto.
-
+    simpl in *; unfold lookup_field in *; destruct (@existsb field_id (beq_nat fi) (dfield_ids c)); auto; admit.
+Admitted.
 
 Inductive FJ_reduce (ct : class_table) : expr -> expr -> Prop :=
 | R_Field : forall c (pfc : valid_class ct c) fi le ei n,
@@ -1521,7 +1521,11 @@ Proof.
   - simpl. destruct typ_chk_lib as [ei_l Hei_l]. inversion Hei_l.
     destruct typ_chk_ct as [ei Hei]. inversion Hei. inversion fj_e0. subst.
     rename pfc into pfc_l. inversion pft. assert (valid_class ct c) as pfc by auto.
-    apply Rel_Lib_Field with c pfc ei_l; eauto.
+    assert ((id_of c) = (id_of c0)).
+    { eapply type_of_fn. apply pft. eauto. eauto. eauto. }
+    assert (exists di, declaring_class ct c pfc f0 = Some di).
+    { apply decl_iff_lookup. eexists. eauto.
+    eapply Rel_Lib_Field with c pfc ei_l; eauto.
     + apply IHe0; eauto.
     + rewrite <- decl_in_lib_decl_in_ct with (pfc_l := pfc_l); trivial.
     + apply do_valid_sub_keep_type; trivial. subst ci. apply typ_in_lib_typ_in_ct; eauto.
